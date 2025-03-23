@@ -256,7 +256,7 @@ class TableFrame(ctk.CTkFrame):
         self.tree.tag_configure("evenrow", background="#f0f0f0")
         self.tree.tag_configure("oddrow", background="#ffffff")
 
-
+#run
 if __name__ == "__main__":
     Dashboard = Dashboard()
     Dashboard.mainloop()
