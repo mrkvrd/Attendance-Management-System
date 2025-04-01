@@ -200,7 +200,7 @@ class TableFrame(ctk.CTkFrame):
         columns = ("ID", "Name", "Status", "Time In", "Time Out")
         self.tree = ttk.Treeview(self, columns=columns, show="headings tree", height=8)
 
-        self.tree.heading("#0", text="Photo", anchor="center")  # First column stores images
+        self.tree.heading("#0", text="Photo", anchor="center")
         self.tree.heading("ID", text="ID", anchor="center")
         self.tree.heading("Name", text="Name", anchor="w")
         self.tree.heading("Status", text="Status", anchor="center")
