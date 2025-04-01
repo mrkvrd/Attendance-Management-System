@@ -1,6 +1,8 @@
 import customtkinter as ctk
 from PIL import Image
 from AdminDashboard import Dashboard
+import sqlite3
+from sqlite3 import Error
 
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("green")
@@ -80,14 +82,45 @@ class LoginFrame(ctk.CTkFrame):
         self.ShowPassCheck.grid(row=3, column=0, sticky="w", padx=30, pady=5)
 
         self.LoginButton = ctk.CTkButton(self, text="Login", font=("Arial", 15, "bold"), height=40, corner_radius=0,
-                                         fg_color="#115272", hover_color="#07212e", command=self.open_admindashboard)
-        self.LoginButton.grid(row=4, column=0, pady=20, padx=30,sticky="nwe")
+                                         fg_color="#115272", hover_color="#07212e", command=self.authenticate_admin)
+        self.LoginButton.grid(row=4, column=0, pady=20, padx=30, sticky="nwe")
 
     def toggle_password(self):
         if self.ShowPassVar.get():
             self.PassEntry.configure(show="")
         else:
             self.PassEntry.configure(show="*")
+
+    def authenticate_admin(self):
+        username = self.UserEntry.get()
+        password = self.PassEntry.get()
+
+        if not username or not password:
+            self.show_error("Please enter both username and password")
+            return
+
+        try:
+            conn = sqlite3.connect("AMS.db")
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT * FROM Admins WHERE Username = ? AND Password = ?", (username, password))
+            admin = cursor.fetchone()
+
+            if admin:
+                self.open_admindashboard()
+            else:
+                self.show_error("Invalid username or password")
+
+        except Error as e:
+            self.show_error(f"Database error: {str(e)}")
+        finally:
+            if conn:
+                conn.close()
+
+    def show_error(self, message):
+        error_label = ctk.CTkLabel(self, text=message, text_color="red", font=("Arial", 12))
+        error_label.grid(row=5, column=0, sticky="nwe", pady=5)
+        self.after(3000, error_label.destroy)
 
     def open_admindashboard(self):
         self.master.destroy()

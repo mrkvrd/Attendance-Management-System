@@ -197,22 +197,25 @@ class TableFrame(ctk.CTkFrame):
                   background=[("active", "#115272"), ("pressed", "#115272")],
                   foreground=[("active", "white"), ("pressed", "white")])
 
-        columns = ("ID", "Name", "Status", "Time In", "Time Out")
+        # Define columns
+        columns = ("Student No.", "Name", "Course", "Section", "Status")
         self.tree = ttk.Treeview(self, columns=columns, show="headings tree", height=8)
 
+        # Configure headings
         self.tree.heading("#0", text="Photo", anchor="center")
-        self.tree.heading("ID", text="ID", anchor="center")
-        self.tree.heading("Name", text="Name", anchor="w")
+        self.tree.heading("Student No.", text="Student No.", anchor="center")
+        self.tree.heading("Name", text="Name", anchor="center")
+        self.tree.heading("Course", text="Course", anchor="center")
+        self.tree.heading("Section", text="Section", anchor="center")
         self.tree.heading("Status", text="Status", anchor="center")
-        self.tree.heading("Time In", text="Time In", anchor="center")
-        self.tree.heading("Time Out", text="Time Out", anchor="center")
 
+        # Configure columns
         self.tree.column("#0", width=120, minwidth=110, anchor="center")
-        self.tree.column("ID", width=50, anchor="center")
+        self.tree.column("Student No.", width=100, anchor="center")
         self.tree.column("Name", width=200, anchor="w")
-        self.tree.column("Status", width=120, anchor="center")
-        self.tree.column("Time In", width=120, anchor="center")
-        self.tree.column("Time Out", width=120, anchor="center")
+        self.tree.column("Course", width=150, anchor="center")
+        self.tree.column("Section", width=100, anchor="center")
+        self.tree.column("Status", width=100, anchor="center")
 
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscroll=scrollbar.set)
@@ -224,37 +227,17 @@ class TableFrame(ctk.CTkFrame):
         self.grid_rowconfigure(0, weight=1)
 
         self.images = {}
-        image_files = {
-            "Alice": "images/img_2.png",
-            "Bob": "images/img_1.png",
-            "Charlie": "images/img_2.png",
-            "David": "images/img_1.png",
-            "Eve": "images/bg.png"
-        }
-
-        for name, file in image_files.items():
-            img = Image.open(file).resize((120, 100))
-            self.images[name] = ImageTk.PhotoImage(img)
-
-        self.image_refs = list(self.images.values())
-
-        sample_data = [
-            ("Alice", "001", "Alice", "Present", "08:00 AM", "05:00 PM"),
-            ("Bob", "002", "Bob", "Absent", "-", "-"),
-            ("Charlie", "003", "Charlie", "Present", "08:05 AM", "04:50 PM"),
-            ("David", "004", "David", "Late", "08:30 AM", "05:00 PM"),
-            ("Eve", "005", "Eve", "Present", "07:55 AM", "05:10 PM"),
-        ]
-
-        for i, row in enumerate(sample_data):
-            name, *values = row
-            tag = "evenrow" if i % 2 == 0 else "oddrow"
-            image = self.images.get(name, "")
-
-            self.tree.insert("", "end", text="", image=image, values=values, tags=(tag,))
+        self.image_refs = []
 
         self.tree.tag_configure("evenrow", background="#f0f0f0")
         self.tree.tag_configure("oddrow", background="#ffffff")
+
+    def format_student_no(self, student_no):
+        clean_no = ''.join(filter(str.isdigit, str(student_no)))
+
+        if len(clean_no) == 6:
+            return f"{clean_no[:2]}-{clean_no[2:]}"
+        return clean_no
 
 if __name__ == "__main__":
     Dashboard = Dashboard()
