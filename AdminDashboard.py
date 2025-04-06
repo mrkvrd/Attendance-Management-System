@@ -3,6 +3,9 @@ from PIL import Image
 import os
 import sys
 from tkinter import messagebox
+from Dashboard import InfoFrame, TableFrame
+from Dashboard import TableHeader as OriginalTableHeader
+import sqlite3
 
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("green")
@@ -13,6 +16,7 @@ class Dashboard(ctk.CTk):
 
         self.window_width = 1080
         self.window_height = 720
+        self.configure(fg_color="#ffffff")
 
         self.title("Admin")
         self.iconbitmap("images/icon.ico")
@@ -23,14 +27,18 @@ class Dashboard(ctk.CTk):
         self.after(100, lambda: self.state("zoomed"))
         self.bind("<Map>", self.on_restore)
 
-        self.grid_columnconfigure((0, 1), weight=1)
+        self.grid_columnconfigure(0, weight=0)
+        self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=0)
         self.grid_rowconfigure(1, weight=1)
 
         self.HeadFrame = HeadFrame(self)
         self.HeadFrame.grid(row=0, column=0, columnspan=2, sticky="nwe")
 
-        self.TabFrame = TabFrame(self)
+        self.MainView = MainView(self)
+        self.MainView.grid(row=1, column=1, sticky="nwes")
+
+        self.TabFrame = TabFrame(self, self.MainView)
         self.TabFrame.grid(row=1, column=0, sticky="nws")
 
     def on_restore(self, event=None):
@@ -60,22 +68,24 @@ class HeadFrame(ctk.CTkFrame):
         self.ImageLabel2.grid(row=0, column=2, rowspan=2, pady=3)
 
 class TabFrame(ctk.CTkFrame):
-    def __init__(self, master):
+    def __init__(self, master, main_view):
         super().__init__(master)
+        self.main_view = main_view
 
         self.configure(fg_color="#115272", corner_radius=0, width=275)
         self.grid_rowconfigure((0,1,2,3), weight=0)
         self.grid_rowconfigure(4, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
+        self.MainView = main_view
         self.MenuLabel = ctk.CTkLabel(self, fg_color="#45b45d", width=260, height=50, font=("Arial", 20, "bold"), text_color="#ffffff", text="Menu")
         self.MenuLabel.grid(row=0, column=0, sticky="nwe", pady=15)
 
         self.RoomsButton = ctk.CTkButton(self, fg_color="#115272", height=50, font=("Arial", 17, "bold"),
-                                         text_color="#ffffff", text="Rooms", hover_color="#1a6e98")
+                                         text_color="#ffffff", text="Rooms", hover_color="#1a6e98", command=self.RoomsTab)
         self.RoomsButton.grid(row=1, column=0, sticky="nwe", pady=5)
         self.RegisterButton = ctk.CTkButton(self, fg_color="#115272", height=50, font=("Arial", 17, "bold"),
-                                         text_color="#ffffff", text="Student Register", hover_color="#1a6e98")
+                                         text_color="#ffffff", text="Student Register", hover_color="#1a6e98", command=self.StudentTab)
         self.RegisterButton.grid(row=2, column=0, sticky="nwe", pady=5)
         self.ScheduleButton = ctk.CTkButton(self, fg_color="#115272", height=50, font=("Arial", 17, "bold"),
                                          text_color="#ffffff", text="Schedule", hover_color="#1a6e98")
@@ -85,6 +95,15 @@ class TabFrame(ctk.CTkFrame):
                                          text_color="#ffffff", text="Logout", hover_color="#1a6e98", command=self.Logout)
         self.LogoutButton.grid(row=4, column=0, sticky="swe")
 
+    def RoomsTab(self):
+        self.main_view.set("Rooms")
+
+    def StudentTab(self):
+        self.main_view.set("Student Register")
+
+    def ScheduleTab(self):
+        self.main_view.set("Schedule")
+
     def Logout(self):
         confirm = messagebox.askyesno("Confirm Logout", "Are you sure you want to logout?")
         if confirm:
@@ -92,10 +111,92 @@ class TabFrame(ctk.CTkFrame):
             python = sys.executable
             os.execv(python, [python, "AdminLogin.py"])
 
+
+class TableHeader(OriginalTableHeader):
+    def __init__(self, master):
+        super().__init__(master)
+
+        self.ComboBox.destroy()
+
+        self.ComboBox = ctk.CTkComboBox(self,
+                                        values=["Dashboard", "View Room Schedule"],
+                                        corner_radius=0,
+                                        border_color="#115272",
+                                        button_color="#28A745",
+                                        button_hover_color="#208637",
+                                        text_color="#ffffff",
+                                        fg_color="#115272",
+                                        justify="right",
+                                        dropdown_font=("Arial", 13, "bold"),
+                                        state="readonly",
+                                        dropdown_fg_color="#ffffff",
+                                        font=("Arial", 15, "bold"),
+                                        command=self.on_select)
+        self.ComboBox.grid(row=0, column=2, sticky="e", pady=5, padx=20)
+
 class MainView(ctk.CTkTabview):
     def __init__(self, master):
         super().__init__(master)
 
+        self.add("Rooms")
+        self.add("Student Register")
+        self.add("Schedule")
+
+        self.configure(fg_color="#ffffff", corner_radius=0)
+        self._segmented_button.grid_forget()
+
+        self.room_tab = self.tab("Rooms")
+        self.room_tab.grid_columnconfigure((0,1), weight=1)
+        self.room_tab.grid_rowconfigure(0, weight=0)
+        self.room_tab.grid_rowconfigure(1, weight=0)
+        self.room_tab.grid_rowconfigure(2, weight=3)
+
+        self.dropdown_frame = ctk.CTkFrame(self.room_tab, fg_color="transparent")
+        self.dropdown_frame.grid(row=0, column=1, sticky="news")
+        self.dropdown_frame.grid_columnconfigure(0, weight=1)
+        self.dropdown_frame.grid_rowconfigure((0,1), weight=1)
+
+        self.room_label = ctk.CTkLabel(
+            self.dropdown_frame,
+            text="Select Room:",
+            font=("Arial", 18, "bold"),
+            text_color="#115272"
+        )
+        self.room_label.grid(row=0, column=0, sticky="s", pady=(0, 5))
+
+        self.dropdown = ctk.CTkComboBox(
+            self.dropdown_frame, button_color="#28A745", button_hover_color="#208637",
+            justify="center", state="readonly", dropdown_fg_color="#ffffff",
+            font=("Arial", 18, "bold"), text_color="#115272",
+            dropdown_font=("Arial", 15, "bold"),
+            corner_radius=0,
+            width=300, height=35, border_color="#115272"
+        )
+        self.dropdown.grid(row=1, column=0, sticky="n", pady=(5, 0))
+        self.load_room_ids()
+
+        self.info_frame = InfoFrame(self.room_tab)
+        self.info_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+
+        self.table_header = TableHeader(self.room_tab)
+        self.table_header.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=10)
+
+        self.table_frame = TableFrame(self.room_tab)
+        self.table_frame.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=10, pady=10)
+
+    def load_room_ids(self):
+        try:
+            conn = sqlite3.connect("AMS.db")
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT RoomCode FROM Rooms")
+            room_ids = [str(row[0]) for row in cursor.fetchall()]
+
+            self.dropdown.configure(values=room_ids)
+
+            conn.close()
+        except sqlite3.Error as e:
+            print("Database error:", e)
 
 
 if __name__ == "__main__":
