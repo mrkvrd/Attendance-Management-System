@@ -88,7 +88,7 @@ class TabFrame(ctk.CTkFrame):
                                          text_color="#ffffff", text="Student Register", hover_color="#1a6e98", command=self.StudentTab)
         self.RegisterButton.grid(row=2, column=0, sticky="nwe", pady=5)
         self.ScheduleButton = ctk.CTkButton(self, fg_color="#115272", height=50, font=("Arial", 17, "bold"),
-                                         text_color="#ffffff", text="Schedule", hover_color="#1a6e98")
+                                         text_color="#ffffff", text="Schedule", hover_color="#1a6e98", command=self.ScheduleTab)
         self.ScheduleButton.grid(row=3, column=0, sticky="nwe", pady=5)
 
         self.LogoutButton = ctk.CTkButton(self, fg_color="#115272", height=50, font=("Arial", 15, "bold"),
