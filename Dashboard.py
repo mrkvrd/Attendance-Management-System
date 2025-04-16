@@ -197,11 +197,9 @@ class TableFrame(ctk.CTkFrame):
                   background=[("active", "#115272"), ("pressed", "#115272")],
                   foreground=[("active", "white"), ("pressed", "white")])
 
-        # Define columns - added "Department"
         columns = ("Student No.", "Name", "Course", "Department", "Section", "Status")
         self.tree = ttk.Treeview(self, columns=columns, show="headings tree", height=8)
 
-        # Configure headings - added "Department"
         self.tree.heading("#0", text="Photo", anchor="center")
         self.tree.heading("Student No.", text="Student No.", anchor="center")
         self.tree.heading("Name", text="Name", anchor="center")
