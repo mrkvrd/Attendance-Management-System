@@ -205,13 +205,14 @@ class MainView(ctk.CTkTabview):
         self.Sched_tab.grid_rowconfigure(0, weight=0)
         self.Sched_tab.grid_rowconfigure(1, weight=1)
 
-        self.AddSchedFrame = AddScheduleFrame(self.Sched_tab)
+        self.SchedTableFrame = SchedTableFrame(self.Sched_tab)
+        self.SchedTableFrame.grid(row=1, column=0, sticky="nsew")
+
+        self.AddSchedFrame = AddScheduleFrame(self.Sched_tab, self.SchedTableFrame)
         self.AddSchedFrame.grid(row=0, column=0, sticky="nsew")
 
-        self.SchedTableFrame = SchedTableFrame(self.Sched_tab)
         self.SchedTableFrame.grid_columnconfigure(0, weight=1)
         self.SchedTableFrame.grid_rowconfigure(0, weight=1)
-        self.SchedTableFrame.grid(row=1, column=0, sticky="nsew")
 
     def load_room_ids(self):
         try:
@@ -225,9 +226,10 @@ class MainView(ctk.CTkTabview):
             print("Database error:", e)
 
 class AddScheduleFrame(ctk.CTkFrame):
-    def __init__(self, master):
+    def __init__(self, master, table_frame):
         super().__init__(master)
 
+        self.table_frame = table_frame
         self.configure(fg_color="#ffffff", height=300)
         self.grid_propagate(False)
         self.grid_columnconfigure((0, 1, 2), weight=1)
@@ -319,7 +321,8 @@ class AddScheduleFrame(ctk.CTkFrame):
                                fg_color="#45b45d",
                                hover_color="#308042",
                                corner_radius=0,
-                               text="SAVE SCHEDULE")
+                               text="SAVE SCHEDULE",
+                               command=self.save_schedule)
         button.grid(row=row, column=column, sticky="nw", padx=40)
         return button
 
@@ -334,65 +337,246 @@ class AddScheduleFrame(ctk.CTkFrame):
         except sqlite3.Error as e:
             print("Database error:", e)
 
+    def save_schedule(self):
+        subject = self.Subject_Entry.get()
+        section = self.Section_Entry.get()
+        professor = self.Professor_Entry.get()
+        day = self.Day_Dropdown.get()
+        time_in = self.Time_in.get()
+        time_out = self.Time_out.get()
+        room = self.Room_Dropdown.get()
+
+        if not all([subject, section,
+                    professor]) or day == "Day" or time_in == "Time In" or time_out == "Time Out" or room == "Room":
+            messagebox.showwarning("Warning", "Please fill in all fields before saving.")
+            return
+
+        try:
+            conn = sqlite3.connect("AMS.db")
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO Schedule (Subject, Section, Professor, Day, TimeIn, TimeOut, Room)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (subject, section, professor, day, time_in, time_out, room))
+            conn.commit()
+            conn.close()
+
+            messagebox.showinfo("Success", "Schedule saved successfully!")
+            self.clear_form()
+            self.table_frame.load_data()  # Refresh the table
+
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Error", "Selected Room does not exist in Rooms table.")
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"An error occurred: {e}")
+
+    def clear_form(self):
+        self.Subject_Entry.delete(0, "end")
+        self.Section_Entry.delete(0, "end")
+        self.Professor_Entry.delete(0, "end")
+        self.Day_Dropdown.set("Day")
+        self.Time_in.set("Time In")
+        self.Time_out.set("Time Out")
+        self.Room_Dropdown.set("Room")
+
+
 class SchedTableFrame(ctk.CTkFrame):
     def __init__(self, master):
         super().__init__(master)
-
         self.configure(corner_radius=10, fg_color="#f5f5f5")
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
         style = ttk.Style()
         style.theme_use("clam")
-
         style.configure("Treeview",
                         background="#ffffff",
                         foreground="black",
-                        rowheight=60,
+                        rowheight=40,
                         fieldbackground="#f8f8f8",
-                        font=("Arial", 14))
-
+                        font=("Arial", 12, "bold"))
         style.configure("Treeview.Heading",
-                        font=("Arial", 16, "bold"),
+                        font=("Arial", 14, "bold"),
                         background="#115272",
                         foreground="white")
-
         style.map("Treeview.Heading",
                   background=[("active", "#115272"), ("pressed", "#115272")],
                   foreground=[("active", "white"), ("pressed", "white")])
 
         columns = ("Subject", "Section", "Professor", "Day", "Time In", "Time Out", "Room", "Action")
-        self.tree = ttk.Treeview(self, columns=columns, show="headings", height=8)
+        self.tree = ttk.Treeview(self, columns=columns, show="headings", height=15)
 
-        self.tree.heading("Subject", text="Subject", anchor="center")
-        self.tree.heading("Section", text="Section", anchor="center")
-        self.tree.heading("Professor", text="Professor", anchor="center")
-        self.tree.heading("Day", text="Day", anchor="center")
-        self.tree.heading("Time In", text="Time In", anchor="center")
-        self.tree.heading("Time Out", text="Time Out", anchor="center")
-        self.tree.heading("Room", text="Room", anchor="center")
-        self.tree.heading("Action", text="Action", anchor="center")
+        self.tree.bind("<Button-1>", self.on_treeview_click)
 
-        self.tree.column("Subject", width=125, anchor="center")
-        self.tree.column("Section", width=125, anchor="center")
-        self.tree.column("Professor", width=200, anchor="center")
-        self.tree.column("Day", width=100, anchor="center")
-        self.tree.column("Time In", width=100, anchor="center")
-        self.tree.column("Time Out", width=100, anchor="center")
-        self.tree.column("Room", width=100, anchor="center")
-        self.tree.column("Action", width=120, anchor="center")
+        col_widths = {
+            "Subject": 120, "Section": 80, "Professor": 150,
+            "Day": 80, "Time In": 80, "Time Out": 80,
+            "Room": 80, "Action": 150
+        }
+
+        for col in columns:
+            self.tree.heading(col, text=col, anchor="center")
+            self.tree.column(col, width=col_widths[col], anchor="center")
+
+            if col != "Action":
+                self.tree.heading(col, command=lambda _col=col: self.sort_treeview_by_column(_col))
 
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscroll=scrollbar.set)
 
+        self.sort_frame = ctk.CTkFrame(self, fg_color="#f5f5f5")
+        self.sort_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 10))
+
+        self.sort_label = ctk.CTkLabel(self.sort_frame, text="Sort by:", font=("Arial", 12, "bold"))
+        self.sort_label.grid(row=0, column=0, padx=5, pady=5)
+
+        self.sort_button = ctk.CTkButton(
+            self.sort_frame,
+            text="Day & Time",
+            font=("Arial", 12, "bold"),
+            fg_color="#115272",
+            hover_color="#1a6e98",
+            corner_radius=5,
+            height=30,
+            command=self.sort_by_day_and_time
+        )
+        self.sort_button.grid(row=0, column=1, padx=5, pady=5)
+
         self.tree.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         scrollbar.grid(row=0, column=1, sticky="ns", pady=10)
 
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(0, weight=1)
-
         self.tree.tag_configure("evenrow", background="#f0f0f0")
         self.tree.tag_configure("oddrow", background="#ffffff")
+
+        self.day_order = {
+            "Monday": 1,
+            "Tuesday": 2,
+            "Wednesday": 3,
+            "Thursday": 4,
+            "Friday": 5,
+            "Saturday": 6,
+        }
+
+        self.load_data()
+
+    def load_data(self):
+        try:
+            conn = sqlite3.connect("AMS.db")
+            cursor = conn.cursor()
+            cursor.execute("SELECT Subject, Section, Professor, Day, TimeIn, TimeOut, Room FROM Schedule")
+            rows = cursor.fetchall()
+
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+
+            for index, row in enumerate(rows):
+                tag = "evenrow" if index % 2 == 0 else "oddrow"
+                self.tree.insert("", "end",
+                                 values=(row[0], row[1], row[2], row[3], row[4], row[5], row[6], "Archive | Delete"),
+                                 tags=(tag,))
+
+            conn.close()
+        except sqlite3.Error as e:
+            print(f"Database error: {e}")
+
+    def sort_treeview_by_column(self, column):
+        items = [(self.tree.set(item, column), item) for item in self.tree.get_children("")]
+
+        items.sort()
+
+        for index, (_, item) in enumerate(items):
+            self.tree.move(item, "", index)
+
+            tag = "evenrow" if index % 2 == 0 else "oddrow"
+            self.tree.item(item, tags=(tag,))
+
+    def sort_by_day_and_time(self):
+        items = []
+        for item in self.tree.get_children(""):
+            values = self.tree.item(item, "values")
+            day = values[3]
+            time_in = values[4]
+
+            day_value = self.day_order.get(day, 99)
+
+            time_parts = time_in.split()
+            if len(time_parts) == 2:
+                time_value, am_pm = time_parts
+                hours, minutes = time_value.split(":")
+                hours = int(hours)
+
+                if am_pm == "PM" and hours < 12:
+                    hours += 12
+                elif am_pm == "AM" and hours == 12:
+                    hours = 0
+
+                time_value = hours * 60 + int(minutes)
+            else:
+                time_value = 0
+
+            items.append((day_value, time_value, item))
+
+        items.sort()
+
+        for index, (_, _, item) in enumerate(items):
+            self.tree.move(item, "", index)
+
+            tag = "evenrow" if index % 2 == 0 else "oddrow"
+            self.tree.item(item, tags=(tag,))
+
+        messagebox.showinfo("Success", "Schedule sorted by day and time!")
+
+    def on_treeview_click(self, event):
+        region = self.tree.identify("region", event.x, event.y)
+        if region == "cell":
+            column = self.tree.identify_column(event.x)
+            item = self.tree.identify_row(event.y)
+
+            if column == "#8":
+                x, y, width, height = self.tree.bbox(item, column)
+                if event.x > x + width / 2:
+                    self.delete_schedule(item)
+                else:
+                    self.archive_schedule(item)
+
+    def archive_schedule(self, item):
+        values = self.tree.item(item, "values")
+        print(f"Archive action for: {values[:7]}")
+        self.tree.item(item, values=(*values[:7], "✔Archived | Delete"))
+
+    def delete_schedule(self, item):
+        values = self.tree.item(item, "values")
+        subject = values[0]
+        section = values[1]
+        day = values[3]
+        time_in = values[4]
+        time_out = values[5]
+        room = values[6]
+
+        confirm = messagebox.askyesno("Confirm Delete",
+                                      f"Are you sure you want to delete this schedule?\n\nSubject: {subject}\nSection: {section}\nDay: {day}\nTime: {time_in} - {time_out}\nRoom: {room}")
+
+        if confirm:
+            try:
+                conn = sqlite3.connect("AMS.db")
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    DELETE FROM Schedule 
+                    WHERE Subject = ? AND Section = ? AND Day = ? AND TimeIn = ? AND TimeOut = ? AND Room = ?
+                """, (subject, section, day, time_in, time_out, room))
+
+                conn.commit()
+                conn.close()
+
+                self.tree.delete(item)
+
+                messagebox.showinfo("Success", "Schedule deleted successfully!")
+
+            except sqlite3.Error as e:
+                messagebox.showerror("Database Error", f"An error occurred while deleting: {e}")
+        else:
+            print("Delete operation cancelled")
 
 if __name__ == "__main__":
     Dashboard = Dashboard()
