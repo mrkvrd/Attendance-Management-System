@@ -5,18 +5,27 @@ import sys
 from PIL import Image, ImageTk
 import cv2
 from tkinter import messagebox
+import sqlite3
+from sqlite3 import Error
 
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("green")
 
+
 class Dashboard(ctk.CTk):
-    def __init__(self):
+    def __init__(self, room_code):
         super().__init__()
+
+        self.room_code = room_code
 
         self.window_width = 1080
         self.window_height = 720
 
-        self.title("Room Login")
+        title_text = "Room Login"
+        if room_code:
+            title_text = f"Room {room_code} - Dashboard"
+
+        self.title(title_text)
         self.iconbitmap("images/icon.ico")
         self.screen_width = self.winfo_screenwidth()
         self.screen_height = self.winfo_screenheight()
@@ -25,7 +34,7 @@ class Dashboard(ctk.CTk):
         self.after(100, lambda: self.state("zoomed"))
         self.bind("<Map>", self.on_restore)
 
-        self.grid_columnconfigure((0,1), weight=1)
+        self.grid_columnconfigure((0, 1), weight=1)
         self.grid_rowconfigure(0, weight=0)
         self.grid_rowconfigure(1, weight=0)
         self.grid_rowconfigure(2, weight=0)
@@ -163,16 +172,20 @@ class TableHeader(ctk.CTkFrame):
         elif choice == "Dashboard":
             print("Dashboard selected")
             self.Label2.configure(text="Students Time Table")
+            self.master.TableFrame.switch_to_student_view()
         elif choice == "Early Out":
             print("Early Out selected")
         elif choice == "View Room Schedule":
             print("View Room Schedule selected")
             self.Label2.configure(text="Room Schedule")
-
+            self.master.TableFrame.switch_to_schedule_view()
 
 class TableFrame(ctk.CTkFrame):
     def __init__(self, master):
         super().__init__(master)
+
+        self.master = master
+        self.current_view = "students"  # default view
 
         self.configure(corner_radius=10, fg_color="#f5f5f5")
         self.grid_rowconfigure(0, weight=1)
@@ -186,7 +199,7 @@ class TableFrame(ctk.CTkFrame):
                         foreground="black",
                         rowheight=110,
                         fieldbackground="#f8f8f8",
-                        font=("Arial", 14))
+                        font=("Arial", 14, "bold"))
 
         style.configure("Treeview.Heading",
                         font=("Arial", 16, "bold"),
@@ -197,24 +210,8 @@ class TableFrame(ctk.CTkFrame):
                   background=[("active", "#115272"), ("pressed", "#115272")],
                   foreground=[("active", "white"), ("pressed", "white")])
 
-        columns = ("Student No.", "Name", "Course", "Department", "Section", "Status")
-        self.tree = ttk.Treeview(self, columns=columns, show="headings tree", height=8)
-
-        self.tree.heading("#0", text="Photo", anchor="center")
-        self.tree.heading("Student No.", text="Student No.", anchor="center")
-        self.tree.heading("Name", text="Name", anchor="center")
-        self.tree.heading("Course", text="Course", anchor="center")
-        self.tree.heading("Department", text="Department", anchor="center")
-        self.tree.heading("Section", text="Section", anchor="center")
-        self.tree.heading("Status", text="Status", anchor="center")
-
-        self.tree.column("#0", width=120, minwidth=110, anchor="center")
-        self.tree.column("Student No.", width=100, anchor="center")
-        self.tree.column("Name", width=200, anchor="w")
-        self.tree.column("Course", width=150, anchor="center")
-        self.tree.column("Department", width=150, anchor="center")
-        self.tree.column("Section", width=100, anchor="center")
-        self.tree.column("Status", width=100, anchor="center")
+        self.tree = ttk.Treeview(self, show="headings tree", height=8)
+        self.setup_student_columns()
 
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscroll=scrollbar.set)
@@ -222,21 +219,71 @@ class TableFrame(ctk.CTkFrame):
         self.tree.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         scrollbar.grid(row=0, column=1, sticky="ns", pady=10)
 
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(0, weight=1)
-
         self.images = {}
         self.image_refs = []
 
         self.tree.tag_configure("evenrow", background="#f0f0f0")
         self.tree.tag_configure("oddrow", background="#ffffff")
 
-    def format_student_no(self, student_no):
-        clean_no = ''.join(filter(str.isdigit, str(student_no)))
+    def setup_student_columns(self):
+        columns = ("Student No.", "Name", "Course", "Department", "Section", "Status")
+        self.tree.config(columns=columns)
 
-        if len(clean_no) == 6:
-            return f"{clean_no[:2]}-{clean_no[2:]}"
-        return clean_no
+        for col in self.tree["columns"]:
+            self.tree.heading(col, text=col, anchor="center")
+            self.tree.column(col, anchor="center")
+
+        self.tree.heading("#0", text="Photo", anchor="center")
+        self.tree.column("#0", width=120, minwidth=110, anchor="center")
+
+    def setup_schedule_columns(self):
+        columns = ("Subject", "Section", "Professor", "Day", "Time In", "Time Out")
+        self.tree.config(columns=columns)
+
+        for col in columns:
+            self.tree.heading(col, text=col, anchor="center")
+            self.tree.column(col, anchor="center")
+
+        self.tree.heading("#0", text="", anchor="center")
+        self.tree.column("#0", width=0, minwidth=0)
+
+    def load_schedule_data(self):
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        try:
+            conn = sqlite3.connect("AMS.db")
+            cursor = conn.cursor()
+
+            room_code = self.master.room_code
+
+            cursor.execute("SELECT Subject, Section, Professor, Day, TimeIn, TimeOut FROM Schedule WHERE Room = ?", (room_code,))
+            rows = cursor.fetchall()
+
+            for index, row in enumerate(rows):
+                tag = "evenrow" if index % 2 == 0 else "oddrow"
+                self.tree.insert("", "end", values=row, tags=(tag,))
+
+            conn.close()
+        except Error as e:
+            messagebox.showerror("Database Error", f"Error connecting to database: {e}")
+
+    def switch_to_schedule_view(self):
+        self.current_view = "schedule"
+
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        self.setup_schedule_columns()
+        self.load_schedule_data()
+
+    def switch_to_student_view(self):
+        self.current_view = "students"
+
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        self.setup_student_columns()
 
 if __name__ == "__main__":
     Dashboard = Dashboard()
