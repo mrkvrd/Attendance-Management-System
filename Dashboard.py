@@ -85,7 +85,7 @@ class InfoFrame(ctk.CTkFrame):
         self.ImageLabel3 = ctk.CTkLabel(self, text="", image=self.StudentImage)
         self.ImageLabel3.grid(row=0, column=0, rowspan=4, sticky="nswe", pady=20)
 
-        self.StudentName = ctk.CTkLabel(self, text="Evardo, Mark Anthony", font=("Arial", 25, "bold"), pady=20)
+        self.StudentName = ctk.CTkLabel(self, text="Student Name", font=("Arial", 25, "bold"), pady=20)
         self.StudentName.grid(row=0, column=1, columnspan=2, sticky="nsw")
 
         self.StudentNoLabel = ctk.CTkLabel(self, text="Student No.:", font=("Arial", 20))
@@ -95,12 +95,12 @@ class InfoFrame(ctk.CTkFrame):
 
         self.StudentProgramLabel = ctk.CTkLabel(self, text="Department:", font=("Arial", 20))
         self.StudentProgramLabel.grid(row=2, column=1, sticky="nw")
-        self.StudentProgramEntry = ctk.CTkLabel(self, text="CCS", font=("Arial", 20, "bold"))
+        self.StudentProgramEntry = ctk.CTkLabel(self, text="_______", font=("Arial", 20, "bold"))
         self.StudentProgramEntry.grid(row=2, column=2, sticky="new")
 
         self.StudentSectionLabel = ctk.CTkLabel(self, text="Program:", font=("Arial", 20))
         self.StudentSectionLabel.grid(row=3, column=1, sticky="nw")
-        self.StudentSectionEntry = ctk.CTkLabel(self, text="BSIT", font=("Arial", 20, "bold"))
+        self.StudentSectionEntry = ctk.CTkLabel(self, text="_______", font=("Arial", 20, "bold"))
         self.StudentSectionEntry.grid(row=3, column=2, sticky="new")
 
 class CamFrame(ctk.CTkFrame):
@@ -208,12 +208,11 @@ class TableFrame(ctk.CTkFrame):
         self.tree.heading("Section", text="Section", anchor="center")
         self.tree.heading("Status", text="Status", anchor="center")
 
-        # Configure columns - added "Department"
         self.tree.column("#0", width=120, minwidth=110, anchor="center")
         self.tree.column("Student No.", width=100, anchor="center")
         self.tree.column("Name", width=200, anchor="w")
         self.tree.column("Course", width=150, anchor="center")
-        self.tree.column("Department", width=150, anchor="center")  # New department column
+        self.tree.column("Department", width=150, anchor="center")
         self.tree.column("Section", width=100, anchor="center")
         self.tree.column("Status", width=100, anchor="center")
 
