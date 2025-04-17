@@ -108,7 +108,7 @@ class LoginFrame(ctk.CTkFrame):
             room = cursor.fetchone()
 
             if room:
-                self.open_dashboard()
+                self.open_dashboard(room_code)
             else:
                 self.show_error("Invalid room code or password")
 
@@ -123,9 +123,9 @@ class LoginFrame(ctk.CTkFrame):
         error_label.grid(row=5, column=0, sticky="nwe", pady=5)
         self.after(3000, error_label.destroy)
 
-    def open_dashboard(self):
+    def open_dashboard(self, room_code):
         self.master.destroy()
-        dashboard = Dashboard()
+        dashboard = Dashboard(room_code)
         dashboard.mainloop()
 
 if __name__ == "__main__":
