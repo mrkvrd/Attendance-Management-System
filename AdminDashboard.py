@@ -5,12 +5,13 @@ from PIL import Image
 import os
 import sys
 from tkinter import messagebox
-from Dashboard import InfoFrame, TableFrame
+from Dashboard import InfoFrame
 from Dashboard import TableHeader as OriginalTableHeader
 import sqlite3
 
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("green")
+
 
 class Dashboard(ctk.CTk):
     def __init__(self):
@@ -49,18 +50,20 @@ class Dashboard(ctk.CTk):
             position_left = int((self.screen_width - self.window_width) / 2)
             self.geometry(f"{self.window_width}x{self.window_height}+{position_left}+{position_top}")
 
+
 class HeadFrame(ctk.CTkFrame):
     def __init__(self, master):
         super().__init__(master)
 
-        self.grid_rowconfigure((0,1),weight=1)
-        self.grid_columnconfigure((0,1,2),weight=1)
+        self.grid_rowconfigure((0, 1), weight=1)
+        self.grid_columnconfigure((0, 1, 2), weight=1)
         self.configure(fg_color="#115272", corner_radius=0)
 
-        self.Label1 = ctk.CTkLabel(self, text="Quezon City University - RFID Attendance System", text_color="white", font=("Arial", 25, "bold"))
-        self.Label1.grid(row=0, column=1, sticky="nsew",pady=5)
+        self.Label1 = ctk.CTkLabel(self, text="Quezon City University - RFID Attendance System", text_color="white",
+                                   font=("Arial", 25, "bold"))
+        self.Label1.grid(row=0, column=1, sticky="nsew", pady=5)
         self.Label2 = ctk.CTkLabel(self, text="San Bartolome Campus", text_color="white", font=("Arial", 15))
-        self.Label2.grid(row=1, column=1, sticky="nsew",pady=3)
+        self.Label2.grid(row=1, column=1, sticky="nsew", pady=3)
 
         self.Qcuimg = ctk.CTkImage(light_image=Image.open("images/img_1.png"), size=(40, 40))
         self.ImageLabel1 = ctk.CTkLabel(self, image=self.Qcuimg, text="")
@@ -69,32 +72,38 @@ class HeadFrame(ctk.CTkFrame):
         self.ImageLabel2 = ctk.CTkLabel(self, image=self.Qcimg, text="")
         self.ImageLabel2.grid(row=0, column=2, rowspan=2, pady=3)
 
+
 class TabFrame(ctk.CTkFrame):
     def __init__(self, master, main_view):
         super().__init__(master)
         self.main_view = main_view
 
         self.configure(fg_color="#115272", corner_radius=0, width=275)
-        self.grid_rowconfigure((0,1,2,3), weight=0)
+        self.grid_rowconfigure((0, 1, 2, 3), weight=0)
         self.grid_rowconfigure(4, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
         self.MainView = main_view
-        self.MenuLabel = ctk.CTkLabel(self, fg_color="#45b45d", width=260, height=50, font=("Arial", 20, "bold"), text_color="#ffffff", text="Menu")
+        self.MenuLabel = ctk.CTkLabel(self, fg_color="#45b45d", width=260, height=50, font=("Arial", 20, "bold"),
+                                      text_color="#ffffff", text="Menu")
         self.MenuLabel.grid(row=0, column=0, sticky="nwe", pady=15)
 
         self.RoomsButton = ctk.CTkButton(self, fg_color="#115272", height=50, font=("Arial", 17, "bold"),
-                                         text_color="#ffffff", text="Rooms", hover_color="#1a6e98", command=self.RoomsTab)
+                                         text_color="#ffffff", text="Rooms", hover_color="#1a6e98",
+                                         command=self.RoomsTab)
         self.RoomsButton.grid(row=1, column=0, sticky="nwe", pady=5)
         self.RegisterButton = ctk.CTkButton(self, fg_color="#115272", height=50, font=("Arial", 17, "bold"),
-                                         text_color="#ffffff", text="Student Register", hover_color="#1a6e98", command=self.StudentTab)
+                                            text_color="#ffffff", text="Student Register", hover_color="#1a6e98",
+                                            command=self.StudentTab)
         self.RegisterButton.grid(row=2, column=0, sticky="nwe", pady=5)
         self.ScheduleButton = ctk.CTkButton(self, fg_color="#115272", height=50, font=("Arial", 17, "bold"),
-                                         text_color="#ffffff", text="Schedule", hover_color="#1a6e98", command=self.ScheduleTab)
+                                            text_color="#ffffff", text="Schedule", hover_color="#1a6e98",
+                                            command=self.ScheduleTab)
         self.ScheduleButton.grid(row=3, column=0, sticky="nwe", pady=5)
 
         self.LogoutButton = ctk.CTkButton(self, fg_color="#115272", height=50, font=("Arial", 15, "bold"),
-                                         text_color="#ffffff", text="Logout", hover_color="#1a6e98", command=self.Logout)
+                                          text_color="#ffffff", text="Logout", hover_color="#1a6e98",
+                                          command=self.Logout)
         self.LogoutButton.grid(row=4, column=0, sticky="swe")
 
     def RoomsTab(self):
@@ -113,13 +122,13 @@ class TabFrame(ctk.CTkFrame):
             python = sys.executable
             os.execv(python, [python, "AdminLogin.py"])
 
-
 class TableHeader(OriginalTableHeader):
-    def __init__(self, master):
+    def __init__(self, master, table_frame):
         super().__init__(master)
 
-        self.ComboBox.destroy()
+        self.table_frame = table_frame
 
+        self.ComboBox.destroy()
         self.ComboBox = ctk.CTkComboBox(self,
                                         values=["Dashboard", "View Room Schedule"],
                                         corner_radius=0,
@@ -133,8 +142,17 @@ class TableHeader(OriginalTableHeader):
                                         state="readonly",
                                         dropdown_fg_color="#ffffff",
                                         font=("Arial", 15, "bold"),
-                                        command=self.on_select)
+                                        command=self.on_table_select)
         self.ComboBox.grid(row=0, column=2, sticky="e", pady=5, padx=20)
+        self.ComboBox.set("Dashboard")
+
+    def on_table_select(self, choice):
+        if choice == "Dashboard":
+            self.Label2.configure(text="Students Time Table")
+            self.table_frame.switch_to_student_view()
+        elif choice == "View Room Schedule":
+            self.Label2.configure(text="Room Schedule")
+            self.table_frame.switch_to_schedule_view()
 
 class MainView(ctk.CTkTabview):
     def __init__(self, master):
@@ -184,20 +202,25 @@ class MainView(ctk.CTkTabview):
             corner_radius=0,
             width=300,
             height=35,
-            border_color="#115272"
+            border_color="#115272",
+            command=self.on_room_selected
         )
         self.dropdown.grid(row=1, column=0, sticky="n", pady=(5, 0))
 
         self.info_frame = InfoFrame(self.room_tab)
         self.info_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
-        self.table_header = TableHeader(self.room_tab)
-        self.table_header.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=10)
-
-        self.table_frame = TableFrame(self.room_tab)
+        self.table_frame = RoomTableFrame(self.room_tab)
         self.table_frame.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=10, pady=10)
 
+        self.table_header = TableHeader(self.room_tab, self.table_frame)
+        self.table_header.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=10)
+
         self.load_room_ids()
+
+    def on_room_selected(self, room_code):
+        self.table_frame.current_room_code = room_code
+        self.table_frame.reload_data()
 
     def setup_schedule_tab(self):
         self.Sched_tab = self.tab("Schedule")
@@ -221,9 +244,166 @@ class MainView(ctk.CTkTabview):
             cursor.execute("SELECT RoomCode FROM Rooms")
             room_ids = [str(row[0]) for row in cursor.fetchall()]
             self.dropdown.configure(values=room_ids)
+            if room_ids:
+                self.dropdown.set(room_ids[0])
+                self.on_room_selected(room_ids[0])
             conn.close()
         except sqlite3.Error as e:
             print("Database error:", e)
+
+
+class RoomTableFrame(ctk.CTkFrame):
+    def __init__(self, master):
+        super().__init__(master)
+
+        self.configure(corner_radius=10, fg_color="#f5f5f5")
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        self.current_room_code = None
+        self.current_view = "students"
+
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("Treeview",
+                        background="#ffffff",
+                        foreground="black",
+                        rowheight=40,
+                        fieldbackground="#f8f8f8",
+                        font=("Arial", 12, "bold"))
+        style.configure("Treeview.Heading",
+                        font=("Arial", 14, "bold"),
+                        background="#115272",
+                        foreground="white")
+        style.map("Treeview.Heading",
+                  background=[("active", "#115272"), ("pressed", "#115272")],
+                  foreground=[("active", "white"), ("pressed", "white")])
+
+        self.tree = ttk.Treeview(self, show="headings", height=15)
+
+        self.setup_student_columns()
+
+        scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscroll=scrollbar.set)
+
+        self.tree.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        scrollbar.grid(row=0, column=1, sticky="ns", pady=10)
+
+        self.tree.tag_configure("evenrow", background="#f0f0f0")
+        self.tree.tag_configure("oddrow", background="#ffffff")
+
+    def setup_student_columns(self):
+        columns = ("Student No.", "Name", "Course", "Department", "Section", "Status")
+        self.tree.config(columns=columns, show="headings tree")
+
+        column_widths = {
+            "Student No.": 120,
+            "Name": 200,
+            "Course": 120,
+            "Department": 150,
+            "Section": 100,
+            "Status": 100
+        }
+
+        for col in columns:
+            self.tree.heading(col, text=col, anchor="center")
+            self.tree.column(col, anchor="center", width=column_widths.get(col, 100), stretch=True)
+
+        self.tree.heading("#0", text="Photo", anchor="center")
+        self.tree.column("#0", width=120, minwidth=110, anchor="center")
+
+    def setup_schedule_columns(self):
+        columns = ("Subject", "Section", "Professor", "Day", "Time In", "Time Out")
+        self.tree.config(columns=columns, show="headings")  # Change to show="headings" to hide #0 column
+
+        column_widths = {
+            "Subject": 200,
+            "Section": 120,
+            "Professor": 200,
+            "Day": 100,
+            "Time In": 100,
+            "Time Out": 100
+        }
+
+        for col in columns:
+            self.tree.heading(col, text=col, anchor="center")
+            self.tree.column(col, anchor="center", width=column_widths.get(col, 100), stretch=True)
+
+    def switch_to_student_view(self):
+        self.current_view = "students"
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        self.tree.configure(show="headings tree")
+        self.setup_student_columns()
+        self.reload_data()
+
+    def switch_to_schedule_view(self):
+        self.current_view = "schedule"
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        self.setup_schedule_columns()
+        self.reload_data()
+
+    def reload_data(self):
+        if not self.current_room_code:
+            return
+
+        if self.current_view == "students":
+            self.load_student_data()
+        else:
+            self.load_schedule_data()
+
+    def load_student_data(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        try:
+            conn = sqlite3.connect("AMS.db")
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT s.StudentID, s.Name, s.Course, s.Department, s.Section, a.Status 
+                FROM Students s
+                JOIN Attendance a ON s.StudentID = a.StudentID
+                WHERE a.RoomCode = ?
+                ORDER BY a.AttendanceDate DESC
+            """, (self.current_room_code,))
+
+            rows = cursor.fetchall()
+
+            for index, row in enumerate(rows):
+                tag = "evenrow" if index % 2 == 0 else "oddrow"
+                self.tree.insert("", "end", values=row, tags=(tag,))
+
+            conn.close()
+
+        except sqlite3.Error as e:
+            print(f"Database error: {e}")
+
+    def load_schedule_data(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        try:
+            conn = sqlite3.connect("AMS.db")
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT Subject, Section, Professor, Day, TimeIn, TimeOut 
+                FROM Schedule 
+                WHERE Room = ?
+            """, (self.current_room_code,))
+
+            rows = cursor.fetchall()
+
+            for index, row in enumerate(rows):
+                tag = "evenrow" if index % 2 == 0 else "oddrow"
+                self.tree.insert("", "end", values=row, tags=(tag,))
+
+            conn.close()
+
+        except sqlite3.Error as e:
+            print(f"Database error: {e}")
 
 class AddScheduleFrame(ctk.CTkFrame):
     def __init__(self, master, table_frame):
@@ -553,9 +733,7 @@ class SchedTableFrame(ctk.CTkFrame):
         time_out = values[5]
         room = values[6]
 
-        confirm = messagebox.askyesno("Confirm Delete",
-                                      f"Are you sure you want to delete this schedule?\n\nSubject: {subject}\nSection: {section}\nDay: {day}\nTime: {time_in} - {time_out}\nRoom: {room}")
-
+        confirm = messagebox.askyesno("Confirm Delete",f"Are you sure you want to delete this schedule?\n\nSubject: {subject}\nSection: {section}\nDay: {day}\nTime: {time_in} - {time_out}\nRoom: {room}")
         if confirm:
             try:
                 conn = sqlite3.connect("AMS.db")
@@ -570,7 +748,6 @@ class SchedTableFrame(ctk.CTkFrame):
                 conn.close()
 
                 self.tree.delete(item)
-
                 messagebox.showinfo("Success", "Schedule deleted successfully!")
 
             except sqlite3.Error as e:
