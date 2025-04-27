@@ -17,7 +17,7 @@ class Dashboard(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.window_width = 1280
+        self.window_width = 1440
         self.window_height = 800
         self.configure(fg_color="#ffffff")
 
@@ -167,6 +167,8 @@ class MainView(ctk.CTkTabview):
 
         self.setup_rooms_tab()
 
+        self.setup_student_register_tab()
+
         self.setup_schedule_tab()
 
     def setup_rooms_tab(self):
@@ -221,6 +223,18 @@ class MainView(ctk.CTkTabview):
     def on_room_selected(self, room_code):
         self.table_frame.current_room_code = room_code
         self.table_frame.reload_data()
+
+    def setup_student_register_tab(self):
+        self.Reg_tab = self.tab("Student Register")
+        self.Reg_tab.grid_columnconfigure(0, weight=1)
+        self.Reg_tab.grid_rowconfigure(0, weight=0)
+        self.Reg_tab.grid_rowconfigure(1, weight=1)
+
+        self.AddStudentFrame = AddStudentFrame(self.Reg_tab)
+        self.AddStudentFrame.grid(row=0, column=0, sticky="nsew")
+
+        self.StudentTableFrame = StudentTableFrame(self.Reg_tab)
+        self.StudentTableFrame.grid(row=1, column=0, sticky="nsew")
 
     def setup_schedule_tab(self):
         self.Sched_tab = self.tab("Schedule")
@@ -314,7 +328,7 @@ class RoomTableFrame(ctk.CTkFrame):
 
     def setup_schedule_columns(self):
         columns = ("Subject", "Section", "Professor", "Day", "Time In", "Time Out")
-        self.tree.config(columns=columns, show="headings")  # Change to show="headings" to hide #0 column
+        self.tree.config(columns=columns, show="headings")
 
         column_widths = {
             "Subject": 200,
@@ -362,8 +376,8 @@ class RoomTableFrame(ctk.CTkFrame):
             cursor = conn.cursor()
 
             cursor.execute("""
-                SELECT s.StudentID, s.Name, s.Course, s.Department, s.Section, a.Status 
-                FROM Students s
+                SELECT StudentID, Name, Course, Department, Section, Status 
+                FROM Student s
                 JOIN Attendance a ON s.StudentID = a.StudentID
                 WHERE a.RoomCode = ?
                 ORDER BY a.AttendanceDate DESC
@@ -404,6 +418,421 @@ class RoomTableFrame(ctk.CTkFrame):
 
         except sqlite3.Error as e:
             print(f"Database error: {e}")
+
+
+class AddStudentFrame(ctk.CTkFrame):
+    def __init__(self, master):
+        super().__init__(master)
+
+        self.conn = sqlite3.connect('AMS.db')
+        self.cursor = self.conn.cursor()
+
+        self.create_table_if_not_exists()
+
+        self.configure(fg_color="#ffffff", height=300)
+        self.grid_propagate(False)
+        self.grid_columnconfigure((0, 1, 2), weight=1)
+        self.grid_rowconfigure((0, 1, 2, 3, 4, 5, 6), weight=1)
+
+        self.StudNo_label = ctk.CTkLabel(self, text="Student No.", font=("Arial", 15, "bold"), text_color="#545454")
+        self.StudNo_label.grid(row=1, column=0, padx=40, sticky="sw")
+        self.StudNo_entry = ctk.CTkEntry(self, width=300, height=40, corner_radius=0,
+                                         placeholder_text="Enter Student Number", font=("Arial", 15, "bold"))
+        self.StudNo_entry.grid(row=2, column=0, padx=40, sticky="nw")
+
+        self.Course_label = ctk.CTkLabel(self, text="Course", font=("Arial", 15, "bold"), text_color="#545454")
+        self.Course_label.grid(row=1, column=1, padx=40, sticky="sw")
+        self.Course_dropdown = ctk.CTkComboBox(self, width=300, height=40, corner_radius=0, font=("Arial", 15, "bold"),
+                                               justify="center",
+                                               dropdown_fg_color="#ffffff", dropdown_font=("Arial", 15, "bold"),
+                                               state="readonly",
+                                               values=["BSIT", "BSIS", "BSCS", "BSMA", "BSA", "BSENT", "BSIE", "BSCpE",
+                                                       "BSEcE", "BSED"])
+        self.Course_dropdown.set("Select Course")
+        self.Course_dropdown.grid(row=2, column=1, padx=40, sticky="nw")
+
+        self.Dept_label = ctk.CTkLabel(self, text="Department", font=("Arial", 15, "bold"), text_color="#545454")
+        self.Dept_label.grid(row=1, column=2, padx=40, sticky="sw")
+        self.Dept_dropdown = ctk.CTkComboBox(self, width=300, height=40, corner_radius=0, font=("Arial", 15, "bold"),
+                                             justify="center",
+                                             dropdown_fg_color="#ffffff", dropdown_font=("Arial", 15, "bold"),
+                                             state="readonly",
+                                             values=["CCS", "CBAA", "COE", "CE"])
+        self.Dept_dropdown.set("Select Department")
+        self.Dept_dropdown.grid(row=2, column=2, padx=40, sticky="nw")
+
+        self.StudentName_label = ctk.CTkLabel(self, text="Student Name (LN,FN,MN)",
+                                              font=("Arial", 15, "bold"), text_color="#545454")
+        self.StudentName_label.grid(row=3, column=0, padx=40, sticky="sw")
+        self.LName_entry = ctk.CTkEntry(self, width=300, height=40, corner_radius=0, placeholder_text="Enter Last Name",
+                                        font=("Arial", 15, "bold"))
+        self.LName_entry.grid(row=4, column=0, padx=40, sticky="nw")
+
+        self.FName_entry = ctk.CTkEntry(self, width=300, height=40, corner_radius=0,
+                                        placeholder_text="Enter First Name", font=("Arial", 15, "bold"))
+        self.FName_entry.grid(row=4, column=1, padx=40, sticky="nw")
+
+        self.MName_entry = ctk.CTkEntry(self, width=300, height=40, corner_radius=0,
+                                        placeholder_text="Enter Middle Name", font=("Arial", 15, "bold"))
+        self.MName_entry.grid(row=4, column=2, padx=40, sticky="nw")
+
+        self.rfid_label = ctk.CTkLabel(self, text="Student RFID", font=("Arial", 15, "bold"), text_color="#545454")
+        self.rfid_label.grid(row=5, column=0, padx=40, sticky="sw")
+        self.rfid_entry = ctk.CTkEntry(self, width=300, font=("Arial", 15, "bold"), state="readonly", height=40,
+                                       corner_radius=0, )
+        self.rfid_entry.grid(row=6, column=0, padx=40, sticky="nw")
+
+        self.Save_student = ctk.CTkButton(self, width=300, height=50, font=("Arial", 15, "bold"), text_color="#ffffff",
+                                          fg_color="#45b45d", hover_color="#308042", corner_radius=0,
+                                          text="Save Student",
+                                          command=self.save_student_to_db)
+        self.Save_student.grid(row=6, column=1, padx=40, sticky="nw")
+
+        self.create_regform_widgets()
+        self.setup_serial_connection()
+
+    def create_table_if_not_exists(self):
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS Students (
+                StudentID TEXT PRIMARY KEY,
+                StudentNo TEXT UNIQUE NOT NULL,
+                LastName TEXT NOT NULL,
+                FirstName TEXT NOT NULL,
+                MiddleName TEXT,
+                Course TEXT NOT NULL,
+                Department TEXT NOT NULL
+            )
+        ''')
+        self.conn.commit()
+
+    def create_regform_widgets(self):
+        self.Sched_tab_Head = ctk.CTkLabel(self,
+                                           text="REGISTER A STUDENT",
+                                           font=("Arial", 25, "bold", "underline"),
+                                           text_color="#545454")
+        self.Sched_tab_Head.grid(row=0, column=0, columnspan=2, padx=30, sticky="nw")
+
+    def save_student_to_db(self):
+        student_id = self.rfid_entry.get()
+        student_no = self.StudNo_entry.get()
+        last_name = self.LName_entry.get()
+        first_name = self.FName_entry.get()
+        middle_name = self.MName_entry.get()
+        course = self.Course_dropdown.get()
+        department = self.Dept_dropdown.get()
+
+        if not all([student_id, student_no, last_name, first_name, course != "Select Course",
+                    department != "Select Department"]):
+            messagebox.showwarning("Warning", "Please fill in all required fields before saving.")
+            return
+
+        try:
+            self.cursor.execute('''
+                INSERT INTO Students (StudentID, StudentNo, LastName, FirstName, MiddleName, Course, Department)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (student_id, student_no, last_name, first_name, middle_name, course, department))
+            self.conn.commit()
+            messagebox.showinfo("Success", "Student saved successfully!")
+            self.clear_entries()
+
+            for widget in self.master.winfo_children():
+                if isinstance(widget, StudentTableFrame):
+                    widget.load_data()
+                    break
+
+        except sqlite3.IntegrityError as e:
+            if "StudentID" in str(e):
+                messagebox.showerror("Error", "Student ID (RFID) already exists!")
+            elif "StudentNo" in str(e):
+                messagebox.showerror("Error", "Student Number already exists!")
+            else:
+                messagebox.showerror("Error", f"Database integrity error: {e}")
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {e}")
+
+    def clear_entries(self):
+        self.StudNo_entry.delete(0, "end")
+        self.LName_entry.delete(0, "end")
+        self.FName_entry.delete(0, "end")
+        self.MName_entry.delete(0, "end")
+        self.rfid_entry.configure(state="normal")
+        self.rfid_entry.delete(0, "end")
+        self.rfid_entry.configure(state="readonly")
+        self.Course_dropdown.set("Select Course")
+        self.Dept_dropdown.set("Select Department")
+
+    def setup_serial_connection(self):
+        try:
+            import serial
+            self.arduino = serial.Serial('COM3', 9600, timeout=0.1)
+            self.check_rfid()
+        except Exception as e:
+            print(f"Error connecting to Arduino: {e}")
+            messagebox.showerror("Connection Error", f"Could not connect to Arduino on COM3: {e}")
+
+    def check_rfid(self):
+        try:
+            if hasattr(self, 'arduino') and self.arduino.isOpen():
+                if self.arduino.in_waiting:
+                    rfid_data = self.arduino.readline().decode('utf-8').strip()
+                    if rfid_data:
+                        self.rfid_entry.configure(state="normal")
+                        self.rfid_entry.delete(0, "end")
+                        self.rfid_entry.insert(0, rfid_data)
+                        self.rfid_entry.configure(state="readonly")
+        except Exception as e:
+            print(f"Error reading RFID: {e}")
+
+        self.after(100, self.check_rfid)
+
+
+class StudentTableFrame(ctk.CTkFrame):
+    def __init__(self, master):
+        super().__init__(master)
+
+        self.configure(fg_color="#ffffff")
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("Treeview",
+                        background="#ffffff",
+                        foreground="black",
+                        rowheight=40,
+                        fieldbackground="#f8f8f8",
+                        font=("Arial", 12, "bold"))
+        style.configure("Treeview.Heading",
+                        font=("Arial", 14, "bold"),
+                        background="#115272",
+                        foreground="white")
+        style.map("Treeview.Heading",
+                  background=[("active", "#115272"), ("pressed", "#115272")],
+                  foreground=[("active", "white"), ("pressed", "white")])
+
+        columns = ("Student ID", "Student No.", "Last Name", "First Name", "Middle Name", "Course", "Department", "Action")
+        self.tree = ttk.Treeview(self, columns=columns, show="headings", height=15)
+
+        self.tree.bind("<Button-1>", self.on_treeview_click)
+
+        col_widths = {
+            "Student ID": 150,
+            "Student No.": 120,
+            "Last Name": 150,
+            "First Name": 150,
+            "Middle Name": 120,
+            "Course": 100,
+            "Department": 120,
+            "Action": 150
+        }
+
+        for col in columns:
+            self.tree.heading(col, text=col, anchor="center")
+            self.tree.column(col, width=col_widths[col], anchor="center")
+
+        scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscroll=scrollbar.set)
+
+        self.search_frame = ctk.CTkFrame(self, fg_color="#f5f5f5")
+        self.search_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 10))
+
+        self.search_label = ctk.CTkLabel(self.search_frame, text="Search:", font=("Arial", 12, "bold"))
+        self.search_label.grid(row=0, column=0, padx=5, pady=5)
+
+        self.search_entry = ctk.CTkEntry(self.search_frame, width=200, font=("Arial", 12), corner_radius=5)
+        self.search_entry.grid(row=0, column=1, padx=5, pady=5)
+
+        self.search_button = ctk.CTkButton(self.search_frame, text="Search",
+                                           font=("Arial", 12, "bold"),
+                                           fg_color="#115272", hover_color="#1a6e98",
+                                           corner_radius=5, height=30,
+                                           command=self.search_students)
+        self.search_button.grid(row=0, column=2, padx=5, pady=5)
+
+        self.refresh_button = ctk.CTkButton(self.search_frame, text="Refresh",
+                                            font=("Arial", 12, "bold"),
+                                            fg_color="#28A745", hover_color="#208637",
+                                            corner_radius=5, height=30,
+                                            command=self.load_data)
+        self.refresh_button.grid(row=0, column=3, padx=5, pady=5)
+
+        self.sort_label = ctk.CTkLabel(self.search_frame, text="Sort by:", font=("Arial", 12, "bold"))
+        self.sort_label.grid(row=0, column=4, padx=(20, 5), pady=5)
+
+        self.sort_studno_button = ctk.CTkButton(
+            self.search_frame,
+            text="Student No.",
+            font=("Arial", 12, "bold"),
+            fg_color="#115272",
+            hover_color="#1a6e98",
+            corner_radius=5,
+            height=30,
+            command=lambda: self.sort_treeview_by_column("Student No.")
+        )
+        self.sort_studno_button.grid(row=0, column=5, padx=5, pady=5)
+
+        self.sort_lname_button = ctk.CTkButton(
+            self.search_frame,
+            text="Last Name",
+            font=("Arial", 12, "bold"),
+            fg_color="#115272",
+            hover_color="#1a6e98",
+            corner_radius=5,
+            height=30,
+            command=lambda: self.sort_treeview_by_column("Last Name")
+        )
+        self.sort_lname_button.grid(row=0, column=6, padx=5, pady=5)
+
+        self.sort_dept_button = ctk.CTkButton(
+            self.search_frame,
+            text="Department",
+            font=("Arial", 12, "bold"),
+            fg_color="#115272",
+            hover_color="#1a6e98",
+            corner_radius=5,
+            height=30,
+            command=lambda: self.sort_treeview_by_column("Department")
+        )
+        self.sort_dept_button.grid(row=0, column=7, padx=5, pady=5)
+
+        self.tree.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        scrollbar.grid(row=0, column=1, sticky="ns", pady=10)
+
+        self.tree.tag_configure("evenrow", background="#f0f0f0")
+        self.tree.tag_configure("oddrow", background="#ffffff")
+
+        self.load_data()
+
+    def auto_refresh(self):
+
+        self.load_data()
+
+        self.after(5000, self.auto_refresh)
+
+    def load_data(self):
+        try:
+            conn = sqlite3.connect("AMS.db")
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT StudentID, StudentNo, LastName, FirstName, MiddleName, Course, Department FROM Students
+            """)
+            rows = cursor.fetchall()
+
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+
+            for index, row in enumerate(rows):
+                tag = "evenrow" if index % 2 == 0 else "oddrow"
+
+                values = list(row) + ["Archive | Delete"]
+                self.tree.insert("", "end", values=values, tags=(tag,))
+
+            conn.close()
+        except sqlite3.Error as e:
+            print(f"Database error: {e}")
+            messagebox.showerror("Database Error", f"An error occurred: {e}")
+
+    def sort_treeview_by_column(self, column):
+        items = [(self.tree.set(item, column), item) for item in self.tree.get_children("")]
+
+        items.sort()
+
+        for index, (_, item) in enumerate(items):
+            self.tree.move(item, "", index)
+
+            tag = "evenrow" if index % 2 == 0 else "oddrow"
+            self.tree.item(item, tags=(tag,))
+
+    def search_students(self):
+        search_term = self.search_entry.get().strip().lower()
+        if not search_term:
+            messagebox.showinfo("Search", "Please enter a search term")
+            return
+
+        try:
+            conn = sqlite3.connect("AMS.db")
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT StudentID, StudentNo, LastName, FirstName, MiddleName, Course, Department
+                FROM Students
+                WHERE LOWER(StudentID) LIKE ? OR LOWER(StudentNo) LIKE ? OR 
+                LOWER(LastName) LIKE ? OR LOWER(FirstName) LIKE ? OR
+                LOWER(Course) LIKE ? OR LOWER(Department) LIKE ?
+            """, (f"%{search_term}%", f"%{search_term}%", f"%{search_term}%",
+                  f"%{search_term}%", f"%{search_term}%", f"%{search_term}%"))
+
+            rows = cursor.fetchall()
+
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+
+            for index, row in enumerate(rows):
+                tag = "evenrow" if index % 2 == 0 else "oddrow"
+
+                values = list(row) + ["Archive | Delete"]
+                self.tree.insert("", "end", values=values, tags=(tag,))
+
+            conn.close()
+
+            if not rows:
+                messagebox.showinfo("Search Results", "No matching students found")
+        except sqlite3.Error as e:
+            print(f"Database error: {e}")
+            messagebox.showerror("Database Error", f"An error occurred during search: {e}")
+
+    def on_treeview_click(self, event):
+        region = self.tree.identify("region", event.x, event.y)
+        if region == "cell":
+            column = self.tree.identify_column(event.x)
+            item = self.tree.identify_row(event.y)
+
+            if column == "#8":
+                x, y, width, height = self.tree.bbox(item, column)
+                if event.x > x + width / 2:
+                    self.delete_student(item)
+                else:
+                    self.archive_student(item)
+
+    def archive_student(self, item):
+        values = self.tree.item(item, "values")
+        student_id = values[0]
+        student_name = values[2]
+        print(f"Archive action for: {student_id} - {student_name}")
+        self.tree.item(item, values=(*values[:7], "✔Archived | Delete"))
+
+    def delete_student(self, item):
+        values = self.tree.item(item, "values")
+        student_id = values[0]
+        student_name = values[2]
+
+        confirm = messagebox.askyesno("Confirm Delete",
+                                      f"Are you sure you want to delete this student?\n\nID: {student_id}\nName: {student_name}")
+        if confirm:
+            try:
+                conn = sqlite3.connect("AMS.db")
+                cursor = conn.cursor()
+
+                cursor.execute("DELETE FROM Students WHERE StudentID = ?", (student_id,))
+                conn.commit()
+                conn.close()
+
+                self.tree.delete(item)
+                messagebox.showinfo("Success", "Student deleted successfully!")
+
+            except sqlite3.Error as e:
+                messagebox.showerror("Database Error", f"An error occurred while deleting: {e}")
+        else:
+            print("Delete operation cancelled")
+
+    def sort_students(self, choice):
+        if choice == "Student No.":
+            self.sort_treeview_by_column("Student No.")
+        elif choice == "Last Name":
+            self.sort_treeview_by_column("Last Name")
+        elif choice == "Department":
+            self.sort_treeview_by_column("Department")
 
 class AddScheduleFrame(ctk.CTkFrame):
     def __init__(self, master, table_frame):
@@ -501,7 +930,7 @@ class AddScheduleFrame(ctk.CTkFrame):
                                fg_color="#45b45d",
                                hover_color="#308042",
                                corner_radius=0,
-                               text="SAVE SCHEDULE",
+                               text="Save Schedule",
                                command=self.save_schedule)
         button.grid(row=row, column=column, sticky="nw", padx=40)
         return button

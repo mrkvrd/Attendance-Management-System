@@ -150,7 +150,7 @@ class TableHeader(ctk.CTkFrame):
         self.grid_columnconfigure((0,1,2), weight=1)
         self.configure(height=60, fg_color="#115272", corner_radius=0)
 
-        self.Label1 = ctk.CTkLabel(self, text_color="#ffffff", text="Current_Schedule", font=("Arial", 15, "bold"))
+        self.Label1 = ctk.CTkLabel(self, text_color="#ffffff", text="No Current Schedule", font=("Arial", 15, "bold"))
         self.Label1.grid(row=0, column=0, sticky="w", pady=5, padx=20)
 
         self.Label2 = ctk.CTkLabel(self, text_color="#ffffff", text="Students Time Table", font=("Arial", 25, "bold"))
