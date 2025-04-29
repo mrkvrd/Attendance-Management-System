@@ -307,7 +307,7 @@ class RoomTableFrame(ctk.CTkFrame):
         self.tree.tag_configure("oddrow", background="#ffffff")
 
     def setup_student_columns(self):
-        columns = ("Student No.", "Name", "Course", "Department", "Section", "Status")
+        columns = ("Student No.", "Name", "Course", "Department", "Section", "Time", "Status")
         self.tree.config(columns=columns, show="headings tree")
 
         column_widths = {
@@ -316,6 +316,7 @@ class RoomTableFrame(ctk.CTkFrame):
             "Course": 120,
             "Department": 150,
             "Section": 100,
+            "Time": 100,
             "Status": 100
         }
 
@@ -327,13 +328,14 @@ class RoomTableFrame(ctk.CTkFrame):
         self.tree.column("#0", width=120, minwidth=110, anchor="center")
 
     def setup_schedule_columns(self):
-        columns = ("Subject", "Section", "Professor", "Day", "Time In", "Time Out")
+        columns = ("Subject", "Section", "Professor", "Email", "Day", "Time In", "Time Out")
         self.tree.config(columns=columns, show="headings")
 
         column_widths = {
             "Subject": 200,
             "Section": 120,
-            "Professor": 200,
+            "Professor": 150,
+            "Email": 180,
             "Day": 100,
             "Time In": 100,
             "Time Out": 100
@@ -376,7 +378,7 @@ class RoomTableFrame(ctk.CTkFrame):
             cursor = conn.cursor()
 
             cursor.execute("""
-                SELECT StudentID, Name, Course, Department, Section, Status 
+                SELECT StudentID, Name, Course, Department, Section, strftime('%H:%M', a.AttendanceDate), Status 
                 FROM Student s
                 JOIN Attendance a ON s.StudentID = a.StudentID
                 WHERE a.RoomCode = ?
@@ -403,7 +405,7 @@ class RoomTableFrame(ctk.CTkFrame):
             cursor = conn.cursor()
 
             cursor.execute("""
-                SELECT Subject, Section, Professor, Day, TimeIn, TimeOut 
+                SELECT Subject, Section, Professor, ProfessorEmail, Day, TimeIn, TimeOut 
                 FROM Schedule 
                 WHERE Room = ?
             """, (self.current_room_code,))
@@ -834,6 +836,7 @@ class StudentTableFrame(ctk.CTkFrame):
         elif choice == "Department":
             self.sort_treeview_by_column("Department")
 
+
 class AddScheduleFrame(ctk.CTkFrame):
     def __init__(self, master, table_frame):
         super().__init__(master)
@@ -858,6 +861,8 @@ class AddScheduleFrame(ctk.CTkFrame):
         self.Section_Entry = self.create_entry("Enter Section", 1, 1)
         self.Professor_Entry = self.create_entry("Enter Subject Professor", 1, 2)
 
+        self.Email_Entry = self.create_entry("Enter Professor's Email", 3, 1, sticky="nw")
+
         self.Day_Dropdown = self.create_day_dropdown(2, 0)
 
         times = [f"{hour % 12 or 12}:00 {'AM' if hour < 12 else 'PM'}" for hour in range(7, 22)]
@@ -865,16 +870,16 @@ class AddScheduleFrame(ctk.CTkFrame):
         self.Time_out = self.create_time_dropdown("Time Out", times, 2, 2)
 
         self.Room_Dropdown = self.create_room_dropdown(3, 0)
-        self.SaveSched_Button = self.create_save_button(3, 1)
+        self.SaveSched_Button = self.create_save_button(3, 2)
 
-    def create_entry(self, placeholder, row, column):
+    def create_entry(self, placeholder, row, column, sticky="nw", pady=0):
         entry = ctk.CTkEntry(self,
                              width=300,
                              height=40,
                              corner_radius=0,
                              placeholder_text=placeholder,
                              font=("Arial", 15, "bold"))
-        entry.grid(row=row, column=column, sticky="nw", padx=40)
+        entry.grid(row=row, column=column, sticky=sticky, padx=40, pady=pady)
         return entry
 
     def create_day_dropdown(self, row, column):
@@ -950,29 +955,42 @@ class AddScheduleFrame(ctk.CTkFrame):
         subject = self.Subject_Entry.get()
         section = self.Section_Entry.get()
         professor = self.Professor_Entry.get()
+        professor_email = self.Email_Entry.get()
         day = self.Day_Dropdown.get()
         time_in = self.Time_in.get()
         time_out = self.Time_out.get()
         room = self.Room_Dropdown.get()
 
-        if not all([subject, section,
-                    professor]) or day == "Day" or time_in == "Time In" or time_out == "Time Out" or room == "Room":
+        if not all([subject, section, professor,
+                    professor_email]) or day == "Day" or time_in == "Time In" or time_out == "Time Out" or room == "Room":
             messagebox.showwarning("Warning", "Please fill in all fields before saving.")
+            return
+
+        if "@" not in professor_email or "." not in professor_email:
+            messagebox.showwarning("Warning", "Please enter a valid email address.")
             return
 
         try:
             conn = sqlite3.connect("AMS.db")
             cursor = conn.cursor()
+
+            cursor.execute("PRAGMA table_info(Schedule)")
+            columns = [column[1] for column in cursor.fetchall()]
+
+            if "ProfessorEmail" not in columns:
+                cursor.execute("ALTER TABLE Schedule ADD COLUMN ProfessorEmail TEXT")
+                conn.commit()
+
             cursor.execute("""
-                INSERT INTO Schedule (Subject, Section, Professor, Day, TimeIn, TimeOut, Room)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (subject, section, professor, day, time_in, time_out, room))
+                INSERT INTO Schedule (Subject, Section, Professor, ProfessorEmail, Day, TimeIn, TimeOut, Room)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (subject, section, professor, professor_email, day, time_in, time_out, room))
             conn.commit()
             conn.close()
 
             messagebox.showinfo("Success", "Schedule saved successfully!")
             self.clear_form()
-            self.table_frame.load_data()  # Refresh the table
+            self.table_frame.load_data()
 
         except sqlite3.IntegrityError:
             messagebox.showerror("Error", "Selected Room does not exist in Rooms table.")
@@ -983,6 +1001,7 @@ class AddScheduleFrame(ctk.CTkFrame):
         self.Subject_Entry.delete(0, "end")
         self.Section_Entry.delete(0, "end")
         self.Professor_Entry.delete(0, "end")
+        self.Email_Entry.delete(0, "end")
         self.Day_Dropdown.set("Day")
         self.Time_in.set("Time In")
         self.Time_out.set("Time Out")
@@ -1012,15 +1031,15 @@ class SchedTableFrame(ctk.CTkFrame):
                   background=[("active", "#115272"), ("pressed", "#115272")],
                   foreground=[("active", "white"), ("pressed", "white")])
 
-        columns = ("Subject", "Section", "Professor", "Day", "Time In", "Time Out", "Room", "Action")
+        columns = ("Subject", "Section", "Professor", "Email", "Day", "Time In", "Time Out", "Room", "Action")
         self.tree = ttk.Treeview(self, columns=columns, show="headings", height=15)
 
         self.tree.bind("<Button-1>", self.on_treeview_click)
 
         col_widths = {
-            "Subject": 120, "Section": 80, "Professor": 150,
+            "Subject": 120, "Section": 80, "Professor": 120, "Email": 180,
             "Day": 80, "Time In": 80, "Time Out": 80,
-            "Room": 80, "Action": 150
+            "Room": 80, "Action": 120
         }
 
         for col in columns:
@@ -1072,7 +1091,16 @@ class SchedTableFrame(ctk.CTkFrame):
         try:
             conn = sqlite3.connect("AMS.db")
             cursor = conn.cursor()
-            cursor.execute("SELECT Subject, Section, Professor, Day, TimeIn, TimeOut, Room FROM Schedule")
+
+            cursor.execute("PRAGMA table_info(Schedule)")
+            columns = [column[1] for column in cursor.fetchall()]
+
+            if "ProfessorEmail" not in columns:
+                cursor.execute("ALTER TABLE Schedule ADD COLUMN ProfessorEmail TEXT")
+                conn.commit()
+
+            cursor.execute(
+                "SELECT Subject, Section, Professor, ProfessorEmail, Day, TimeIn, TimeOut, Room FROM Schedule")
             rows = cursor.fetchall()
 
             for item in self.tree.get_children():
@@ -1080,15 +1108,22 @@ class SchedTableFrame(ctk.CTkFrame):
 
             for index, row in enumerate(rows):
                 tag = "evenrow" if index % 2 == 0 else "oddrow"
-                self.tree.insert("", "end",
-                                 values=(row[0], row[1], row[2], row[3], row[4], row[5], row[6], "Archive | Delete"),
-                                 tags=(tag,))
+
+                if len(row) < 8:
+                    row_with_email = row[:3] + ("N/A",) + row[3:]
+                else:
+                    row_with_email = row
+
+                values = row_with_email + ("Archive | Delete",)
+                self.tree.insert("", "end", values=values, tags=(tag,))
 
             conn.close()
         except sqlite3.Error as e:
             print(f"Database error: {e}")
+            messagebox.showerror("Database Error", f"An error occurred: {e}")
 
     def sort_treeview_by_column(self, column):
+        column_index = self.tree["columns"].index(column)
         items = [(self.tree.set(item, column), item) for item in self.tree.get_children("")]
 
         items.sort()
@@ -1103,8 +1138,8 @@ class SchedTableFrame(ctk.CTkFrame):
         items = []
         for item in self.tree.get_children(""):
             values = self.tree.item(item, "values")
-            day = values[3]
-            time_in = values[4]
+            day = values[4]
+            time_in = values[5]
 
             day_value = self.day_order.get(day, 99)
 
@@ -1141,7 +1176,7 @@ class SchedTableFrame(ctk.CTkFrame):
             column = self.tree.identify_column(event.x)
             item = self.tree.identify_row(event.y)
 
-            if column == "#8":
+            if column == "#9":
                 x, y, width, height = self.tree.bbox(item, column)
                 if event.x > x + width / 2:
                     self.delete_schedule(item)
@@ -1150,19 +1185,30 @@ class SchedTableFrame(ctk.CTkFrame):
 
     def archive_schedule(self, item):
         values = self.tree.item(item, "values")
-        print(f"Archive action for: {values[:7]}")
-        self.tree.item(item, values=(*values[:7], "✔Archived | Delete"))
+        print(f"Archive action for: {values[:8]}")
+        self.tree.item(item, values=(*values[:8], "✔Archived | Delete"))
 
     def delete_schedule(self, item):
         values = self.tree.item(item, "values")
         subject = values[0]
         section = values[1]
-        day = values[3]
-        time_in = values[4]
-        time_out = values[5]
-        room = values[6]
+        professor = values[2]
+        email = values[3]
+        day = values[4]
+        time_in = values[5]
+        time_out = values[6]
+        room = values[7]
 
-        confirm = messagebox.askyesno("Confirm Delete",f"Are you sure you want to delete this schedule?\n\nSubject: {subject}\nSection: {section}\nDay: {day}\nTime: {time_in} - {time_out}\nRoom: {room}")
+        confirm = messagebox.askyesno("Confirm Delete",
+                                      f"Are you sure you want to delete this schedule?\n\n"
+                                      f"Subject: {subject}\n"
+                                      f"Section: {section}\n"
+                                      f"Professor: {professor}\n"
+                                      f"Email: {email}\n"
+                                      f"Day: {day}\n"
+                                      f"Time: {time_in} - {time_out}\n"
+                                      f"Room: {room}")
+
         if confirm:
             try:
                 conn = sqlite3.connect("AMS.db")
@@ -1170,8 +1216,8 @@ class SchedTableFrame(ctk.CTkFrame):
 
                 cursor.execute("""
                     DELETE FROM Schedule 
-                    WHERE Subject = ? AND Section = ? AND Day = ? AND TimeIn = ? AND TimeOut = ? AND Room = ?
-                """, (subject, section, day, time_in, time_out, room))
+                    WHERE Subject = ? AND Section = ? AND Professor = ? AND Day = ? AND TimeIn = ? AND TimeOut = ? AND Room = ?
+                """, (subject, section, professor, day, time_in, time_out, room))
 
                 conn.commit()
                 conn.close()
