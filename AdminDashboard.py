@@ -1,7 +1,8 @@
 import customtkinter as ctk
 import tkinter as ttk
 from tkinter import ttk
-from PIL import Image
+from PIL import Image, ImageTk
+from io import BytesIO
 import os
 import sys
 from tkinter import messagebox
@@ -212,16 +213,19 @@ class MainView(ctk.CTkTabview):
         self.info_frame = InfoFrame(self.room_tab)
         self.info_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
-        self.table_frame = RoomTableFrame(self.room_tab)
+        self.table_frame = RoomTableFrame(self.room_tab, table_header=None)
         self.table_frame.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=10, pady=10)
 
         self.table_header = TableHeader(self.room_tab, self.table_frame)
         self.table_header.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=10)
+        self.table_frame.table_header = self.table_header
 
         self.load_room_ids()
 
     def on_room_selected(self, room_code):
         self.table_frame.current_room_code = room_code
+        self.table_frame.load_latest_table_name()
+        self.table_frame.switch_to_student_view()
         self.table_frame.reload_data()
 
     def setup_student_register_tab(self):
@@ -267,8 +271,10 @@ class MainView(ctk.CTkTabview):
 
 
 class RoomTableFrame(ctk.CTkFrame):
-    def __init__(self, master):
+    def __init__(self, master, table_header=None):
         super().__init__(master)
+
+        self.table_header = table_header
 
         self.configure(corner_radius=10, fg_color="#f5f5f5")
         self.grid_rowconfigure(0, weight=1)
@@ -282,7 +288,7 @@ class RoomTableFrame(ctk.CTkFrame):
         style.configure("Treeview",
                         background="#ffffff",
                         foreground="black",
-                        rowheight=40,
+                        rowheight=100,
                         fieldbackground="#f8f8f8",
                         font=("Arial", 12, "bold"))
         style.configure("Treeview.Heading",
@@ -305,6 +311,11 @@ class RoomTableFrame(ctk.CTkFrame):
 
         self.tree.tag_configure("evenrow", background="#f0f0f0")
         self.tree.tag_configure("oddrow", background="#ffffff")
+
+        self.photo_refs = []
+
+        self.latest_table_name = None
+        self.schedule_check_loop()
 
     def setup_student_columns(self):
         columns = ("Student No.", "Name", "Course", "Department", "Section", "Time", "Status")
@@ -345,6 +356,17 @@ class RoomTableFrame(ctk.CTkFrame):
             self.tree.heading(col, text=col, anchor="center")
             self.tree.column(col, anchor="center", width=column_widths.get(col, 100), stretch=True)
 
+    def load_latest_table_name(self):
+        if not self.current_room_code:
+            return
+
+        try:
+            with open(f"latest_table_{self.current_room_code}.txt", "r") as f:
+                self.latest_table_name = f.read().strip()
+        except FileNotFoundError:
+            self.latest_table_name = None
+            print(f"No latest table found for room {self.current_room_code}")
+
     def switch_to_student_view(self):
         self.current_view = "students"
         for item in self.tree.get_children():
@@ -369,32 +391,90 @@ class RoomTableFrame(ctk.CTkFrame):
         else:
             self.load_schedule_data()
 
-    def load_student_data(self):
-        for item in self.tree.get_children():
-            self.tree.delete(item)
+    def schedule_check_loop(self):
+        self.check_and_generate_table()
+        self.after(5000, self.schedule_check_loop)
+
+    def check_and_generate_table(self):
+        if not self.current_room_code:
+            return
 
         try:
             conn = sqlite3.connect("AMS.db")
             cursor = conn.cursor()
 
-            cursor.execute("""
-                SELECT StudentID, Name, Course, Department, Section, strftime('%H:%M', a.AttendanceDate), Status 
-                FROM Student s
-                JOIN Attendance a ON s.StudentID = a.StudentID
-                WHERE a.RoomCode = ?
-                ORDER BY a.AttendanceDate DESC
-            """, (self.current_room_code,))
+            try:
+                with open(f"latest_table_{self.current_room_code}.txt", "r") as f:
+                    last_known_table = f.read().strip()
+                    if self.table_exists(last_known_table, cursor):
+                        self.latest_table_name = last_known_table
+                        if self.table_header:
+                            self.table_header.Label1.configure(text=self.latest_table_name)
+                        if self.current_view == "students":
+                            self.load_student_data()
+                    else:
+                        self.latest_table_name = None
+                        if self.table_header:
+                            self.table_header.Label1.configure(text="No Current Schedule")
+            except FileNotFoundError:
+                self.latest_table_name = None
+                if self.table_header:
+                    self.table_header.Label1.configure(text="No Current Schedule")
+
+            conn.close()
+        except sqlite3.Error as e:
+            print(f"Database error: {e}")
+
+    def table_exists(self, table_name, cursor):
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        return cursor.fetchone() is not None
+
+    def load_student_data(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        if not self.latest_table_name:
+            print("No latest table name available")
+            return
+
+        try:
+            conn = sqlite3.connect("AMS.db")
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (self.latest_table_name,))
+            if not cursor.fetchone():
+                print(f"Table {self.latest_table_name} doesn't exist")
+                return
+
+            cursor.execute(f"""
+                SELECT StudentNo, Name, Course, Department, Section, Time, Status, Photo 
+                FROM [{self.latest_table_name}]
+                ORDER BY Time DESC
+            """)
 
             rows = cursor.fetchall()
 
             for index, row in enumerate(rows):
                 tag = "evenrow" if index % 2 == 0 else "oddrow"
-                self.tree.insert("", "end", values=row, tags=(tag,))
+                photo_blob = row[7]
+
+                if photo_blob:
+                    try:
+                        image = Image.open(BytesIO(photo_blob))
+                        image = image.resize((100, 100), Image.Resampling.LANCZOS)
+                        photo = ImageTk.PhotoImage(image)
+                        self.photo_refs.append(photo)
+                        self.tree.insert("", "end", image=photo, values=row[:7], tags=(tag,))
+                    except Exception as e:
+                        print(f"Error loading photo: {e}")
+                        self.tree.insert("", "end", values=row[:7], tags=(tag,))
+                else:
+                    self.tree.insert("", "end", values=row[:7], tags=(tag,))
 
             conn.close()
 
         except sqlite3.Error as e:
-            print(f"Database error: {e}")
+            print(f"Database error in load_student_data: {e}")
 
     def load_schedule_data(self):
         for item in self.tree.get_children():
@@ -601,7 +681,7 @@ class StudentTableFrame(ctk.CTkFrame):
         style.configure("Treeview",
                         background="#ffffff",
                         foreground="black",
-                        rowheight=40,
+                        rowheight=100,
                         fieldbackground="#f8f8f8",
                         font=("Arial", 12, "bold"))
         style.configure("Treeview.Heading",
@@ -1020,7 +1100,7 @@ class SchedTableFrame(ctk.CTkFrame):
         style.configure("Treeview",
                         background="#ffffff",
                         foreground="black",
-                        rowheight=40,
+                        rowheight=100,
                         fieldbackground="#f8f8f8",
                         font=("Arial", 12, "bold"))
         style.configure("Treeview.Heading",
