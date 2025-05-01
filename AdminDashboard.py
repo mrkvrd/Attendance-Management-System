@@ -228,6 +228,32 @@ class MainView(ctk.CTkTabview):
         self.table_frame.switch_to_student_view()
         self.table_frame.reload_data()
 
+        latest_table = self.table_frame.latest_table_name
+        if latest_table:
+            try:
+                conn = sqlite3.connect("AMS.db")
+                cursor = conn.cursor()
+                cursor.execute(f"""
+                    SELECT Name, StudentNo, Department, Course, Photo 
+                    FROM [{latest_table}] 
+                    ORDER BY ROWID DESC LIMIT 1
+                """)
+                latest = cursor.fetchone()
+                conn.close()
+
+                if latest:
+                    name, student_no, department, course, photo = latest
+                    self.info_frame.update_student_info(name, student_no, department, course)
+                    self.info_frame.update_student_photo(photo)
+                else:
+                    self.info_frame.update_student_info("Student Name", "00-0000", "_______", "_______")
+                    self.info_frame.update_student_photo(None)
+            except sqlite3.Error as e:
+                print(f"Failed to load latest student info: {e}")
+        else:
+            self.info_frame.update_student_info("Student Name", "00-0000", "_______", "_______")
+            self.info_frame.update_student_photo(None)
+
     def setup_student_register_tab(self):
         self.Reg_tab = self.tab("Student Register")
         self.Reg_tab.grid_columnconfigure(0, weight=1)
