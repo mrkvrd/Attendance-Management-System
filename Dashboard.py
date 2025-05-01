@@ -8,6 +8,7 @@ import cv2
 from tkinter import messagebox
 import sqlite3
 from sqlite3 import Error
+from customtkinter import CTkImage
 
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("green")
@@ -56,11 +57,185 @@ class Dashboard(ctk.CTk):
         self.TableFrame = TableFrame(self)
         self.TableFrame.grid(row=3, column=0, columnspan=2, sticky="nswe")
 
+        self.setup_serial_connection()
+
     def on_restore(self, event=None):
         if self.state() == "normal":
             position_top = int((self.screen_height - self.window_height) / 2) - 30
             position_left = int((self.screen_width - self.window_width) / 2)
             self.geometry(f"{self.window_width}x{self.window_height}+{position_left}+{position_top}")
+
+    def setup_serial_connection(self):
+        try:
+            import serial
+            self.arduino = serial.Serial('COM3', 9600, timeout=0.1)
+            self.check_rfid()
+        except Exception as e:
+            print(f"Error connecting to Arduino: {e}")
+            messagebox.showerror("Connection Error", f"Could not connect to Arduino on COM3: {e}")
+
+    def check_rfid(self):
+        try:
+            if hasattr(self, 'arduino') and self.arduino.isOpen():
+                if self.arduino.in_waiting:
+                    rfid_data = self.arduino.readline().decode('utf-8').strip()
+                    if rfid_data and len(rfid_data.strip()) == 11 and rfid_data.count(' ') == 3:
+                        self.process_rfid(rfid_data)
+        except Exception as e:
+            print(f"Error reading RFID: {e}")
+
+        self.after(100, self.check_rfid)
+
+    def start_countdown(self, seconds_left):
+        if seconds_left > 0:
+            self.CamFrame.countdown_label.configure(text=f"Capturing in: {seconds_left}")
+            self.after(1000, lambda: self.start_countdown(seconds_left - 1))
+        else:
+            self.CamFrame.countdown_label.configure(text="")
+
+    def process_rfid(self, rfid_data):
+        if not rfid_data or len(rfid_data.strip()) == 0:
+            return
+
+        try:
+            conn = sqlite3.connect("AMS.db")
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT StudentNo, LastName, FirstName, MiddleName, Course, Department 
+                FROM Students 
+                WHERE StudentID = ?
+            """, (rfid_data,))
+
+            student_data = cursor.fetchone()
+
+            if not student_data:
+                messagebox.showwarning("Not Found", "Student with this RFID not found in database")
+                conn.close()
+                return
+
+            student_no, last_name, first_name, middle_name, course, department = student_data
+
+            if hasattr(self, 'latest_table_name') and self.latest_table_name:
+                cursor.execute(f"""
+                    SELECT COUNT(*) FROM [{self.latest_table_name}]
+                    WHERE StudentNo = ?
+                """, (student_no,))
+                count = cursor.fetchone()[0]
+
+                if count > 0:
+                    messagebox.showwarning("Duplicate", "Attendance already recorded for this student")
+                    conn.close()
+                    return
+
+            if hasattr(self, 'reset_timer'):
+                self.after_cancel(self.reset_timer)
+            self.reset_timer = self.after(300000, self.reset_info_frame)
+
+            self.start_countdown(3)
+
+            self.after(3000, lambda: self.capture_and_save(
+                rfid_data, student_no, last_name, first_name,
+                middle_name, course, department
+            ))
+
+            conn.close()
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"Error looking up student: {e}")
+
+    def capture_and_save(self, rfid_data, student_no, last_name, first_name, middle_name, course, department):
+        if not hasattr(self.TableFrame, 'latest_table_name') or not self.TableFrame.latest_table_name:
+            self.CamFrame.countdown_label.configure(text="")
+            messagebox.showwarning("No Schedule", "No active schedule for this room")
+            return
+
+        try:
+            table_name = self.TableFrame.latest_table_name
+
+            conn = sqlite3.connect("AMS.db")
+            cursor = conn.cursor()
+
+            cursor.execute(f"""
+                SELECT COUNT(*) FROM [{table_name}]
+                WHERE StudentNo = ?
+            """, (student_no,))
+
+            if cursor.fetchone()[0] > 0:
+                self.CamFrame.countdown_label.configure(text="")
+                messagebox.showwarning("Duplicate", "Attendance already recorded for this student")
+                conn.close()
+                return
+
+            ret, frame = self.CamFrame.cap.read()
+            if not ret:
+                self.CamFrame.countdown_label.configure(text="")
+                messagebox.showerror("Error", "Failed to capture photo")
+                conn.close()
+                return
+
+            _, img_encoded = cv2.imencode('.jpg', frame)
+            photo_blob = img_encoded.tobytes()
+
+            current_time = datetime.datetime.now().strftime("%I:%M %p")
+            status = self.determine_status(table_name)
+
+            section = self.get_section_from_table_name(table_name)
+
+            cursor.execute(f"""
+                INSERT INTO [{table_name}] 
+                (StudentNo, Name, Course, Department, Section, Time, Status, Photo)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                student_no,
+                f"{last_name}, {first_name} {middle_name}",
+                course,
+                department,
+                section,
+                current_time,
+                status,
+                photo_blob
+            ))
+
+            self.InfoFrame.update_student_info(
+                f"{last_name}, {first_name} {middle_name}",
+                student_no,
+                department,
+                course
+            )
+            self.InfoFrame.update_student_photo(photo_blob)
+
+            conn.commit()
+            conn.close()
+
+            if self.TableFrame.current_view == "students":
+                self.TableFrame.switch_to_student_view()
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save attendance: {e}")
+        finally:
+            self.CamFrame.countdown_label.configure(text="")
+
+    def determine_status(self, table_name):
+        if "TimeOut" in table_name:
+            return "Time Out"
+
+        try:
+            table_time_str = table_name.split('_')[-2]
+            table_time = datetime.datetime.strptime(table_time_str, "%I%M%p")
+            current_time = datetime.datetime.now()
+
+            time_diff = (current_time - table_time).total_seconds() / 60
+            return "Late" if time_diff > 20 else "Time In"
+        except:
+            return "Time In"
+
+    def get_section_from_table_name(self, table_name):
+        parts = table_name.split('_')
+        return parts[3] if len(parts) > 3 else "N/A"
+
+    def reset_info_frame(self):
+        self.InfoFrame.update_student_info("Student Name", "00-0000", "_______", "_______")
+        self.InfoFrame.update_student_photo(None)
 
 class HeadFrame(ctk.CTkFrame):
     def __init__(self, master):
@@ -103,15 +278,39 @@ class InfoFrame(ctk.CTkFrame):
         self.StudentNoEntry = ctk.CTkLabel(self, text="00-0000", font=("Arial", 20, "bold"), width=300)
         self.StudentNoEntry.grid(row=1, column=2, sticky="new")
 
-        self.StudentProgramLabel = ctk.CTkLabel(self, text="Department:", font=("Arial", 20))
-        self.StudentProgramLabel.grid(row=2, column=1, sticky="nw")
-        self.StudentProgramEntry = ctk.CTkLabel(self, text="_______", font=("Arial", 20, "bold"))
-        self.StudentProgramEntry.grid(row=2, column=2, sticky="new")
+        self.StudentDeptLabel = ctk.CTkLabel(self, text="Department:", font=("Arial", 20))
+        self.StudentDeptLabel.grid(row=2, column=1, sticky="nw")
+        self.StudentDeptLabel = ctk.CTkLabel(self, text="_______", font=("Arial", 20, "bold"))
+        self.StudentDeptLabel.grid(row=2, column=2, sticky="new")
 
-        self.StudentSectionLabel = ctk.CTkLabel(self, text="Program:", font=("Arial", 20))
-        self.StudentSectionLabel.grid(row=3, column=1, sticky="nw")
-        self.StudentSectionEntry = ctk.CTkLabel(self, text="_______", font=("Arial", 20, "bold"))
-        self.StudentSectionEntry.grid(row=3, column=2, sticky="new")
+        self.StudentProgramLabel = ctk.CTkLabel(self, text="Program:", font=("Arial", 20))
+        self.StudentProgramLabel.grid(row=3, column=1, sticky="nw")
+        self.StudentProgramLabel = ctk.CTkLabel(self, text="_______", font=("Arial", 20, "bold"))
+        self.StudentProgramLabel.grid(row=3, column=2, sticky="new")
+
+    def update_student_photo(self, photo_blob):
+        if photo_blob:
+            try:
+                from io import BytesIO
+                image = Image.open(BytesIO(photo_blob))
+                image = image.resize((300, 250))
+                photo = CTkImage(light_image=image, size=(300, 250))
+                self.StudentImage = photo
+                self.ImageLabel3.configure(image=self.StudentImage)
+            except Exception as e:
+                print(f"Failed to update student photo: {e}")
+        else:
+            default = Image.open("images/bg.png")
+            photo = CTkImage(light_image=default, size=(300, 250))
+            self.StudentImage = photo
+            self.ImageLabel3.configure(image=self.StudentImage)
+
+    def update_student_info(self, name, student_no, department, course):
+        self.StudentName.configure(text=name)
+        self.StudentNoEntry.configure(text=student_no)
+        self.StudentDeptLabel.configure(text=department)
+        self.StudentProgramLabel.configure(text=course)
+
 
 class CamFrame(ctk.CTkFrame):
     def __init__(self, master):
@@ -119,11 +318,19 @@ class CamFrame(ctk.CTkFrame):
 
         self.configure(corner_radius=0, fg_color="#ffffff")
 
-        self.cap = cv2.VideoCapture(0)
+        self.countdown_label = ctk.CTkLabel(
+            self,
+            text="",
+            font=("Arial", 24, "bold"),
+            text_color="#115272",
+            height=30
+        )
+        self.countdown_label.pack(pady=(10, 0))
 
         self.camera_label = ctk.CTkLabel(self, text="Initializing Camera...")
         self.camera_label.pack(expand=True, fill="both")
 
+        self.cap = cv2.VideoCapture(0)
         self.update_camera()
 
     def update_camera(self):
@@ -131,13 +338,9 @@ class CamFrame(ctk.CTkFrame):
         if ret:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             img = Image.fromarray(frame)
-
             img = img.resize((300, 250))
-
             self.live_image = ctk.CTkImage(light_image=img, size=(300, 250))
-
             self.camera_label.configure(image=self.live_image, text="")
-
         self.after(30, self.update_camera)
 
     def stop_camera(self):
