@@ -120,8 +120,8 @@ class TabFrame(ctk.CTkFrame):
         confirm = messagebox.askyesno("Confirm Logout", "Are you sure you want to logout?")
         if confirm:
             self.master.destroy()
-            python = sys.executable
-            os.execv(python, [python, "AdminLogin.py"])
+            import AdminLogin
+            AdminLogin.Login().mainloop()
 
 class TableHeader(OriginalTableHeader):
     def __init__(self, master, table_frame):
@@ -833,13 +833,105 @@ class StudentTableFrame(ctk.CTkFrame):
             for index, row in enumerate(rows):
                 tag = "evenrow" if index % 2 == 0 else "oddrow"
 
-                values = list(row) + ["Archive | Delete"]
+                values = list(row) + ["Edit | Delete"]
                 self.tree.insert("", "end", values=values, tags=(tag,))
 
             conn.close()
         except sqlite3.Error as e:
             print(f"Database error: {e}")
             messagebox.showerror("Database Error", f"An error occurred: {e}")
+
+    def on_treeview_click(self, event):
+        region = self.tree.identify("region", event.x, event.y)
+        if region == "cell":
+            column = self.tree.identify_column(event.x)
+            item = self.tree.identify_row(event.y)
+
+            if column == "#8":
+                x, y, width, height = self.tree.bbox(item, column)
+                if event.x > x + width / 2:
+                    self.delete_student(item)
+                else:
+                    self.edit_student(item)
+
+    def edit_student(self, item):
+        values = self.tree.item(item, "values")
+        student_id = values[0]
+
+        edit_window = ctk.CTkToplevel(self)
+        edit_window.title("Edit Student")
+        edit_window.geometry("250x530")
+        edit_window.grab_set()
+        edit_window.configure(fg_color="#ffffff")
+
+        ctk.CTkLabel(edit_window, text="Edit Student Information", font=("Arial", 16, "bold")).pack(pady=10)
+
+        ctk.CTkLabel(edit_window, text="Student No:").pack()
+        stud_no_entry = ctk.CTkEntry(edit_window)
+        stud_no_entry.insert(0, values[1])
+        stud_no_entry.pack(pady=5)
+
+        ctk.CTkLabel(edit_window, text="Last Name:").pack()
+        lname_entry = ctk.CTkEntry(edit_window)
+        lname_entry.insert(0, values[2])
+        lname_entry.pack(pady=5)
+
+        ctk.CTkLabel(edit_window, text="First Name:").pack()
+        fname_entry = ctk.CTkEntry(edit_window)
+        fname_entry.insert(0, values[3])
+        fname_entry.pack(pady=5)
+
+        ctk.CTkLabel(edit_window, text="Middle Name:").pack()
+        mname_entry = ctk.CTkEntry(edit_window)
+        mname_entry.insert(0, values[4] if values[4] else "")
+        mname_entry.pack(pady=5)
+
+        ctk.CTkLabel(edit_window, text="Course:").pack()
+        course_dropdown = ctk.CTkComboBox(edit_window,
+                                          values=["BSIT", "BSIS", "BSCS", "BSMA", "BSA", "BSENT", "BSIE", "BSCpE",
+                                                  "BSEcE", "BSED"])
+        course_dropdown.set(values[5])
+        course_dropdown.pack(pady=5)
+
+        ctk.CTkLabel(edit_window, text="Department:").pack()
+        dept_dropdown = ctk.CTkComboBox(edit_window,
+                                        values=["CCS", "CBAA", "COE", "CE"])
+        dept_dropdown.set(values[6])
+        dept_dropdown.pack(pady=5)
+
+        def save_changes():
+            try:
+                conn = sqlite3.connect("AMS.db")
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    UPDATE Students SET 
+                    StudentNo = ?,
+                    LastName = ?,
+                    FirstName = ?,
+                    MiddleName = ?,
+                    Course = ?,
+                    Department = ?
+                    WHERE StudentID = ?
+                """, (
+                    stud_no_entry.get(),
+                    lname_entry.get(),
+                    fname_entry.get(),
+                    mname_entry.get(),
+                    course_dropdown.get(),
+                    dept_dropdown.get(),
+                    student_id
+                ))
+                conn.commit()
+                conn.close()
+
+                messagebox.showinfo("Success", "Student updated successfully!")
+                edit_window.destroy()
+                self.load_data()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to update student: {e}")
+
+        ctk.CTkButton(edit_window, text="Save Changes", command=save_changes, fg_color="#45b45d", hover_color="#308042", corner_radius=0).pack(pady=20)
 
     def sort_treeview_by_column(self, column):
         items = [(self.tree.set(item, column), item) for item in self.tree.get_children("")]
@@ -889,26 +981,6 @@ class StudentTableFrame(ctk.CTkFrame):
         except sqlite3.Error as e:
             print(f"Database error: {e}")
             messagebox.showerror("Database Error", f"An error occurred during search: {e}")
-
-    def on_treeview_click(self, event):
-        region = self.tree.identify("region", event.x, event.y)
-        if region == "cell":
-            column = self.tree.identify_column(event.x)
-            item = self.tree.identify_row(event.y)
-
-            if column == "#8":
-                x, y, width, height = self.tree.bbox(item, column)
-                if event.x > x + width / 2:
-                    self.delete_student(item)
-                else:
-                    self.archive_student(item)
-
-    def archive_student(self, item):
-        values = self.tree.item(item, "values")
-        student_id = values[0]
-        student_name = values[2]
-        print(f"Archive action for: {student_id} - {student_name}")
-        self.tree.item(item, values=(*values[:7], "✔Archived | Delete"))
 
     def delete_student(self, item):
         values = self.tree.item(item, "values")
@@ -1083,9 +1155,25 @@ class AddScheduleFrame(ctk.CTkFrame):
             cursor.execute("PRAGMA table_info(Schedule)")
             columns = [column[1] for column in cursor.fetchall()]
 
+            if not columns:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS Schedule (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        Subject TEXT,
+                        Section TEXT,
+                        Professor TEXT,
+                        ProfessorEmail TEXT,
+                        Day TEXT,
+                        TimeIn TEXT,
+                        TimeOut TEXT,
+                        Room TEXT
+                    )
+                """)
+            elif "id" not in columns:
+                cursor.execute("ALTER TABLE Schedule ADD COLUMN id INTEGER PRIMARY KEY AUTOINCREMENT")
+
             if "ProfessorEmail" not in columns:
                 cursor.execute("ALTER TABLE Schedule ADD COLUMN ProfessorEmail TEXT")
-                conn.commit()
 
             cursor.execute("""
                 INSERT INTO Schedule (Subject, Section, Professor, ProfessorEmail, Day, TimeIn, TimeOut, Room)
@@ -1137,10 +1225,13 @@ class SchedTableFrame(ctk.CTkFrame):
                   background=[("active", "#115272"), ("pressed", "#115272")],
                   foreground=[("active", "white"), ("pressed", "white")])
 
-        columns = ("Subject", "Section", "Professor", "Email", "Day", "Time In", "Time Out", "Room", "Action")
-        self.tree = ttk.Treeview(self, columns=columns, show="headings", height=15)
+        self.columns = ("id", "Subject", "Section", "Professor", "Email", "Day", "Time In", "Time Out", "Room", "Action")
+        self.tree = ttk.Treeview(self, columns=self.columns, show="headings", height=15)
+        self.tree.column("id", width=0, stretch=False)
 
         self.tree.bind("<Button-1>", self.on_treeview_click)
+
+        visible_columns = ("Subject", "Section", "Professor", "Email", "Day", "Time In", "Time Out", "Room", "Action")
 
         col_widths = {
             "Subject": 120, "Section": 80, "Professor": 120, "Email": 180,
@@ -1148,9 +1239,9 @@ class SchedTableFrame(ctk.CTkFrame):
             "Room": 80, "Action": 120
         }
 
-        for col in columns:
+        for col in visible_columns:
             self.tree.heading(col, text=col, anchor="center")
-            self.tree.column(col, width=col_widths[col], anchor="center")
+            self.tree.column(col, width=col_widths.get(col, 100), anchor="center")
 
             if col != "Action":
                 self.tree.heading(col, command=lambda _col=col: self.sort_treeview_by_column(_col))
@@ -1198,15 +1289,8 @@ class SchedTableFrame(ctk.CTkFrame):
             conn = sqlite3.connect("AMS.db")
             cursor = conn.cursor()
 
-            cursor.execute("PRAGMA table_info(Schedule)")
-            columns = [column[1] for column in cursor.fetchall()]
-
-            if "ProfessorEmail" not in columns:
-                cursor.execute("ALTER TABLE Schedule ADD COLUMN ProfessorEmail TEXT")
-                conn.commit()
-
             cursor.execute(
-                "SELECT Subject, Section, Professor, ProfessorEmail, Day, TimeIn, TimeOut, Room FROM Schedule")
+                "SELECT id, Subject, Section, Professor, ProfessorEmail, Day, TimeIn, TimeOut, Room FROM Schedule")
             rows = cursor.fetchall()
 
             for item in self.tree.get_children():
@@ -1214,19 +1298,166 @@ class SchedTableFrame(ctk.CTkFrame):
 
             for index, row in enumerate(rows):
                 tag = "evenrow" if index % 2 == 0 else "oddrow"
-
-                if len(row) < 8:
-                    row_with_email = row[:3] + ("N/A",) + row[3:]
-                else:
-                    row_with_email = row
-
-                values = row_with_email + ("Archive | Delete",)
+                values = row + ("Edit | Delete",)
                 self.tree.insert("", "end", values=values, tags=(tag,))
 
             conn.close()
         except sqlite3.Error as e:
             print(f"Database error: {e}")
             messagebox.showerror("Database Error", f"An error occurred: {e}")
+
+    def on_treeview_click(self, event):
+        region = self.tree.identify("region", event.x, event.y)
+        if region == "cell":
+            column = self.tree.identify_column(event.x)
+            item = self.tree.identify_row(event.y)
+
+            if column == "#10":
+                x, y, width, height = self.tree.bbox(item, column)
+                if event.x > x + width / 2:
+                    self.delete_schedule(item)
+                else:
+                    self.edit_schedule(item)
+
+    def edit_schedule(self, item):
+        values = self.tree.item(item, "values")
+        schedule_id = values[0]
+
+        if not schedule_id:
+            print("Error: Schedule ID is not available!")
+            return
+
+        edit_window = ctk.CTkToplevel(self)
+        edit_window.title("Edit Schedule")
+        edit_window.geometry("250x650")
+        edit_window.grab_set()
+        edit_window.configure(fg_color="#ffffff")
+
+        ctk.CTkLabel(edit_window, text="Edit Schedule Information", font=("Arial", 16, "bold")).pack(pady=10)
+
+        ctk.CTkLabel(edit_window, text="Subject:").pack()
+        subject_entry = ctk.CTkEntry(edit_window)
+        subject_entry.insert(0, values[1])
+        subject_entry.pack(pady=5)
+
+        ctk.CTkLabel(edit_window, text="Section:").pack()
+        section_entry = ctk.CTkEntry(edit_window)
+        section_entry.insert(0, values[2])
+        section_entry.pack(pady=5)
+
+        ctk.CTkLabel(edit_window, text="Professor:").pack()
+        professor_entry = ctk.CTkEntry(edit_window)
+        professor_entry.insert(0, values[3])
+        professor_entry.pack(pady=5)
+
+        ctk.CTkLabel(edit_window, text="Email:").pack()
+        email_entry = ctk.CTkEntry(edit_window)
+        email_entry.insert(0, values[4])
+        email_entry.pack(pady=5)
+
+        ctk.CTkLabel(edit_window, text="Day:").pack()
+        day_dropdown = ctk.CTkComboBox(edit_window,
+                                       values=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"])
+        day_dropdown.set(values[5])
+        day_dropdown.pack(pady=5)
+
+        ctk.CTkLabel(edit_window, text="Time In:").pack()
+        time_in_dropdown = ctk.CTkComboBox(edit_window,
+                                           values=[f"{hour % 12 or 12}:00 {'AM' if hour < 12 else 'PM'}" for hour in
+                                                   range(7, 22)])
+        time_in_dropdown.set(values[6])
+        time_in_dropdown.pack(pady=5)
+
+        ctk.CTkLabel(edit_window, text="Time Out:").pack()
+        time_out_dropdown = ctk.CTkComboBox(edit_window,
+                                            values=[f"{hour % 12 or 12}:00 {'AM' if hour < 12 else 'PM'}" for hour in
+                                                    range(7, 22)])
+        time_out_dropdown.set(values[7])
+        time_out_dropdown.pack(pady=5)
+
+        ctk.CTkLabel(edit_window, text="Room:").pack()
+        room_dropdown = ctk.CTkComboBox(edit_window)
+        try:
+            conn = sqlite3.connect("AMS.db")
+            cursor = conn.cursor()
+            cursor.execute("SELECT RoomCode FROM Rooms")
+            room_ids = [str(row[0]) for row in cursor.fetchall()]
+            room_dropdown.configure(values=room_ids)
+            room_dropdown.set(values[8])
+            conn.close()
+        except sqlite3.Error as e:
+            print("Database error:", e)
+        room_dropdown.pack(pady=5)
+
+        def save_changes():
+            try:
+                conn = sqlite3.connect("AMS.db")
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                        UPDATE Schedule SET 
+                        Subject = ?,
+                        Section = ?,
+                        Professor = ?,
+                        ProfessorEmail = ?,
+                        Day = ?,
+                        TimeIn = ?,
+                        TimeOut = ?,
+                        Room = ?
+                        WHERE id = ?
+                    """, (
+                    subject_entry.get(),
+                    section_entry.get(),
+                    professor_entry.get(),
+                    email_entry.get(),
+                    day_dropdown.get(),
+                    time_in_dropdown.get(),
+                    time_out_dropdown.get(),
+                    room_dropdown.get(),
+                    schedule_id
+                ))
+
+                conn.commit()
+                conn.close()
+
+                messagebox.showinfo("Success", "Schedule updated successfully!")
+                edit_window.destroy()
+                self.load_data()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to update schedule: {e}")
+
+        ctk.CTkButton(edit_window, text="Save Changes", command=save_changes,
+                      fg_color="#45b45d", hover_color="#308042").pack(pady=20)
+
+    def delete_schedule(self, item):
+        values = self.tree.item(item, "values")
+        schedule_id = values[0]
+
+        confirm = messagebox.askyesno("Confirm Delete",
+                                      f"Are you sure you want to delete this schedule?\n\n"
+                                      f"Subject: {values[1]}\n"
+                                      f"Section: {values[2]}\n"
+                                      f"Professor: {values[3]}\n"
+                                      f"Email: {values[4]}\n"
+                                      f"Day: {values[5]}\n"
+                                      f"Time: {values[6]} - {values[7]}\n"
+                                      f"Room: {values[8]}")
+
+        if confirm:
+            try:
+                conn = sqlite3.connect("AMS.db")
+                cursor = conn.cursor()
+
+                cursor.execute("DELETE FROM Schedule WHERE id = ?", (schedule_id,))
+
+                conn.commit()
+                conn.close()
+
+                self.tree.delete(item)
+                messagebox.showinfo("Success", "Schedule deleted successfully!")
+
+            except sqlite3.Error as e:
+                messagebox.showerror("Database Error", f"An error occurred while deleting: {e}")
 
     def sort_treeview_by_column(self, column):
         column_index = self.tree["columns"].index(column)
@@ -1275,66 +1506,6 @@ class SchedTableFrame(ctk.CTkFrame):
             self.tree.item(item, tags=(tag,))
 
         messagebox.showinfo("Success", "Schedule sorted by day and time!")
-
-    def on_treeview_click(self, event):
-        region = self.tree.identify("region", event.x, event.y)
-        if region == "cell":
-            column = self.tree.identify_column(event.x)
-            item = self.tree.identify_row(event.y)
-
-            if column == "#9":
-                x, y, width, height = self.tree.bbox(item, column)
-                if event.x > x + width / 2:
-                    self.delete_schedule(item)
-                else:
-                    self.archive_schedule(item)
-
-    def archive_schedule(self, item):
-        values = self.tree.item(item, "values")
-        print(f"Archive action for: {values[:8]}")
-        self.tree.item(item, values=(*values[:8], "✔Archived | Delete"))
-
-    def delete_schedule(self, item):
-        values = self.tree.item(item, "values")
-        subject = values[0]
-        section = values[1]
-        professor = values[2]
-        email = values[3]
-        day = values[4]
-        time_in = values[5]
-        time_out = values[6]
-        room = values[7]
-
-        confirm = messagebox.askyesno("Confirm Delete",
-                                      f"Are you sure you want to delete this schedule?\n\n"
-                                      f"Subject: {subject}\n"
-                                      f"Section: {section}\n"
-                                      f"Professor: {professor}\n"
-                                      f"Email: {email}\n"
-                                      f"Day: {day}\n"
-                                      f"Time: {time_in} - {time_out}\n"
-                                      f"Room: {room}")
-
-        if confirm:
-            try:
-                conn = sqlite3.connect("AMS.db")
-                cursor = conn.cursor()
-
-                cursor.execute("""
-                    DELETE FROM Schedule 
-                    WHERE Subject = ? AND Section = ? AND Professor = ? AND Day = ? AND TimeIn = ? AND TimeOut = ? AND Room = ?
-                """, (subject, section, professor, day, time_in, time_out, room))
-
-                conn.commit()
-                conn.close()
-
-                self.tree.delete(item)
-                messagebox.showinfo("Success", "Schedule deleted successfully!")
-
-            except sqlite3.Error as e:
-                messagebox.showerror("Database Error", f"An error occurred while deleting: {e}")
-        else:
-            print("Delete operation cancelled")
 
 if __name__ == "__main__":
     Dashboard = Dashboard()
