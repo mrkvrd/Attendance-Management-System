@@ -721,6 +721,13 @@ class StudentTableFrame(ctk.CTkFrame):
         columns = ("Student ID", "Student No.", "Last Name", "First Name", "Middle Name", "Course", "Department", "Action")
         self.tree = ttk.Treeview(self, columns=columns, show="headings", height=15)
 
+        # Enable column header sorting for student table
+        for col in columns:
+            if col != "Action":
+                self.tree.heading(col, text=col, anchor="center", command=lambda _col=col: self.sort_treeview_by_column(_col))
+            else:
+                self.tree.heading(col, text=col, anchor="center")
+
         self.tree.bind("<Button-1>", self.on_treeview_click)
 
         col_widths = {
@@ -735,7 +742,6 @@ class StudentTableFrame(ctk.CTkFrame):
         }
 
         for col in columns:
-            self.tree.heading(col, text=col, anchor="center")
             self.tree.column(col, width=col_widths[col], anchor="center")
 
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
@@ -763,45 +769,6 @@ class StudentTableFrame(ctk.CTkFrame):
                                             corner_radius=5, height=30,
                                             command=self.load_data)
         self.refresh_button.grid(row=0, column=3, padx=5, pady=5)
-
-        self.sort_label = ctk.CTkLabel(self.search_frame, text="Sort by:", font=("Arial", 12, "bold"))
-        self.sort_label.grid(row=0, column=4, padx=(20, 5), pady=5)
-
-        self.sort_studno_button = ctk.CTkButton(
-            self.search_frame,
-            text="Student No.",
-            font=("Arial", 12, "bold"),
-            fg_color="#115272",
-            hover_color="#1a6e98",
-            corner_radius=5,
-            height=30,
-            command=lambda: self.sort_treeview_by_column("Student No.")
-        )
-        self.sort_studno_button.grid(row=0, column=5, padx=5, pady=5)
-
-        self.sort_lname_button = ctk.CTkButton(
-            self.search_frame,
-            text="Last Name",
-            font=("Arial", 12, "bold"),
-            fg_color="#115272",
-            hover_color="#1a6e98",
-            corner_radius=5,
-            height=30,
-            command=lambda: self.sort_treeview_by_column("Last Name")
-        )
-        self.sort_lname_button.grid(row=0, column=6, padx=5, pady=5)
-
-        self.sort_dept_button = ctk.CTkButton(
-            self.search_frame,
-            text="Department",
-            font=("Arial", 12, "bold"),
-            fg_color="#115272",
-            hover_color="#1a6e98",
-            corner_radius=5,
-            height=30,
-            command=lambda: self.sort_treeview_by_column("Department")
-        )
-        self.sort_dept_button.grid(row=0, column=7, padx=5, pady=5)
 
         self.tree.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         scrollbar.grid(row=0, column=1, sticky="ns", pady=10)
@@ -934,15 +901,41 @@ class StudentTableFrame(ctk.CTkFrame):
         ctk.CTkButton(edit_window, text="Save Changes", command=save_changes, fg_color="#45b45d", hover_color="#308042", corner_radius=0).pack(pady=20)
 
     def sort_treeview_by_column(self, column):
-        items = [(self.tree.set(item, column), item) for item in self.tree.get_children("")]
+        if column == "Action":
+            return  # Don't sort the Action column
 
-        items.sort()
+        # Toggle sort order if the same column is clicked again
+        if getattr(self, "_last_sort_col", None) == column:
+            self._last_sort_reverse = not getattr(self, "_last_sort_reverse", False)
+        else:
+            self._last_sort_reverse = False
+        self._last_sort_col = column
 
-        for index, (_, item) in enumerate(items):
-            self.tree.move(item, "", index)
+        column_index = self.tree["columns"].index(column)
+        items = []
+        for item in self.tree.get_children(""):
+            values = self.tree.item(item, "values")
+            value = values[column_index]
 
+            # Numeric sort for Student ID and Student No.
+            if column in ("Student ID", "Student No."):
+                try:
+                    sort_value = int(value)
+                except Exception:
+                    sort_value = value
+            else:
+                sort_value = value.lower() if isinstance(value, str) else value
+
+            items.append((sort_value, item, values))
+
+        items.sort(reverse=self._last_sort_reverse)
+
+        for item in self.tree.get_children(""):
+            self.tree.delete(item)
+
+        for index, (_, item, values) in enumerate(items):
             tag = "evenrow" if index % 2 == 0 else "oddrow"
-            self.tree.item(item, tags=(tag,))
+            self.tree.insert("", "end", values=values, tags=(tag,))
 
     def search_students(self):
         search_term = self.search_entry.get().strip().lower()
@@ -1005,14 +998,6 @@ class StudentTableFrame(ctk.CTkFrame):
                 messagebox.showerror("Database Error", f"An error occurred while deleting: {e}")
         else:
             print("Delete operation cancelled")
-
-    def sort_students(self, choice):
-        if choice == "Student No.":
-            self.sort_treeview_by_column("Student No.")
-        elif choice == "Last Name":
-            self.sort_treeview_by_column("Last Name")
-        elif choice == "Department":
-            self.sort_treeview_by_column("Department")
 
 
 class AddScheduleFrame(ctk.CTkFrame):
@@ -1249,24 +1234,6 @@ class SchedTableFrame(ctk.CTkFrame):
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscroll=scrollbar.set)
 
-        self.sort_frame = ctk.CTkFrame(self, fg_color="#f5f5f5")
-        self.sort_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 10))
-
-        self.sort_label = ctk.CTkLabel(self.sort_frame, text="Sort by:", font=("Arial", 12, "bold"))
-        self.sort_label.grid(row=0, column=0, padx=5, pady=5)
-
-        self.sort_button = ctk.CTkButton(
-            self.sort_frame,
-            text="Day & Time",
-            font=("Arial", 12, "bold"),
-            fg_color="#115272",
-            hover_color="#1a6e98",
-            corner_radius=5,
-            height=30,
-            command=self.sort_by_day_and_time
-        )
-        self.sort_button.grid(row=0, column=1, padx=5, pady=5)
-
         self.tree.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         scrollbar.grid(row=0, column=1, sticky="ns", pady=10)
 
@@ -1281,6 +1248,9 @@ class SchedTableFrame(ctk.CTkFrame):
             "Friday": 5,
             "Saturday": 6,
         }
+
+        self._last_sort_col = None
+        self._last_sort_reverse = False
 
         self.load_data()
 
@@ -1460,52 +1430,39 @@ class SchedTableFrame(ctk.CTkFrame):
                 messagebox.showerror("Database Error", f"An error occurred while deleting: {e}")
 
     def sort_treeview_by_column(self, column):
+        if column == "Action":
+            return
+
+        if getattr(self, "_last_sort_col", None) == column:
+            self._last_sort_reverse = not getattr(self, "_last_sort_reverse", False)
+        else:
+            self._last_sort_reverse = False
+        self._last_sort_col = column
+
         column_index = self.tree["columns"].index(column)
-        items = [(self.tree.set(item, column), item) for item in self.tree.get_children("")]
-
-        items.sort()
-
-        for index, (_, item) in enumerate(items):
-            self.tree.move(item, "", index)
-
-            tag = "evenrow" if index % 2 == 0 else "oddrow"
-            self.tree.item(item, tags=(tag,))
-
-    def sort_by_day_and_time(self):
         items = []
         for item in self.tree.get_children(""):
             values = self.tree.item(item, "values")
-            day = values[4]
-            time_in = values[5]
+            value = values[column_index]
 
-            day_value = self.day_order.get(day, 99)
-
-            time_parts = time_in.split()
-            if len(time_parts) == 2:
-                time_value, am_pm = time_parts
-                hours, minutes = time_value.split(":")
-                hours = int(hours)
-
-                if am_pm == "PM" and hours < 12:
-                    hours += 12
-                elif am_pm == "AM" and hours == 12:
-                    hours = 0
-
-                time_value = hours * 60 + int(minutes)
+            if column in ("Student ID", "Student No."):
+                try:
+                    sort_value = int(value)
+                except Exception:
+                    sort_value = value
             else:
-                time_value = 0
+                sort_value = value.lower() if isinstance(value, str) else value
 
-            items.append((day_value, time_value, item))
+            items.append((sort_value, item, values))
 
-        items.sort()
+        items.sort(reverse=self._last_sort_reverse)
 
-        for index, (_, _, item) in enumerate(items):
-            self.tree.move(item, "", index)
+        for item in self.tree.get_children(""):
+            self.tree.delete(item)
 
+        for index, (_, item, values) in enumerate(items):
             tag = "evenrow" if index % 2 == 0 else "oddrow"
-            self.tree.item(item, tags=(tag,))
-
-        messagebox.showinfo("Success", "Schedule sorted by day and time!")
+            self.tree.insert("", "end", values=values, tags=(tag,))
 
 if __name__ == "__main__":
     Dashboard = Dashboard()
