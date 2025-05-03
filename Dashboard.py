@@ -900,7 +900,7 @@ class TableFrame(ctk.CTkFrame):
                                                                           time_in, "TimeIn", cursor)
                         print(f"Created TimeIn table: {created_table_name}")
 
-                elif 0 <= time_out_diff <= 59:
+                elif 0 <= time_out_diff <= 30:
                     table_name = self.get_table_name(current_day, subject, professor, section, time_out, "TimeOut")
                     if not self.table_exists(table_name, cursor):
                         created_table_name = self.create_attendance_table(current_day, subject, professor, section,
