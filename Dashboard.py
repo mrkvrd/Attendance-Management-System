@@ -260,7 +260,7 @@ class Dashboard(ctk.CTk):
 
     def setup_timeout_check(self):
         self.check_timeout_inactivity()
-        self.after(60000, self.setup_timeout_check)
+        self.after(6000, self.setup_timeout_check)
 
     def check_timeout_inactivity(self):
         if not hasattr(self.TableFrame, 'latest_table_name') or not self.TableFrame.latest_table_name:
@@ -389,8 +389,8 @@ class Dashboard(ctk.CTk):
             cursor.execute("""
                 SELECT DISTINCT ProfessorEmail 
                 FROM Schedule 
-                WHERE Room = ? AND LOWER(Professor) LIKE LOWER(?) AND Section = ? AND Day = ?
-            """, (self.room_code, f"%{professor_spaced}%", section, day))
+                WHERE Room = ? AND LOWER(Professor) = LOWER(?)
+            """, (self.room_code, professor_spaced))
             result = cursor.fetchone()
             conn.close()
             return result[0] if result else None
@@ -621,8 +621,8 @@ class TableHeader(ctk.CTkFrame):
             cursor.execute("""
                 SELECT DISTINCT ProfessorEmail 
                 FROM Schedule 
-                WHERE Room = ? AND LOWER(Professor) LIKE LOWER(?)
-            """, (self.master.room_code, f"%{professor_spaced}%"))
+                WHERE Room = ? AND LOWER(Professor) = LOWER(?)
+            """, (self.master.room_code, professor_spaced))
 
             result = cursor.fetchone()
 
